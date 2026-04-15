@@ -1,0 +1,96 @@
+<?xml version="1.0" encoding="utf-8"?>
+<declarations>
+    <declaration>
+        <dateDepot>20/12/2024 20:09:38</dateDepot>
+        <uuid>decl-0001</uuid>
+        <participationFinanciereDto>
+            <items>
+                <items>
+                    <commentaire/>
+                    <nomSociete>Crédit Agricole SA</nomSociete>
+                    <evaluation>3 190</evaluation>
+                    <remuneration>151</remuneration>
+                    <capitalDetenu>0,01</capitalDetenu>
+                    <nombreParts>270</nombreParts>
+                </items>
+                <items>
+                    <commentaire>bloc familial</commentaire>
+                    <nomSociete>EDF</nomSociete>
+                    <evaluation>1658</evaluation>
+                    <remuneration>21</remuneration>
+                    <capitalDetenu>0</capitalDetenu>
+                    <nombreParts>144</nombreParts>
+                </items>
+                <items>
+                    <commentaire/>
+                    <nomSociete>0</nomSociete>
+                    <evaluation>0</evaluation>
+                </items>
+            </items>
+            <neant>false</neant>
+        </participationFinanciereDto>
+        <valeursEnBourseDto>
+            <items>
+                <items>
+                    <etablissement>BNP Paribas</etablissement>
+                    <naturePlacement>PEA</naturePlacement>
+                    <valeur>2000</valeur>
+                </items>
+            </items>
+            <neant>false</neant>
+        </valeursEnBourseDto>
+        <participationDirigeantDto>
+            <items>
+                <items>
+                    <nomSociete>ADAC65</nomSociete>
+                    <activite>Administrateur</activite>
+                </items>
+            </items>
+            <neant>false</neant>
+        </participationDirigeantDto>
+        <general>
+            <typeDeclaration><id>DI</id><label>Déclaration d'intérêts</label></typeDeclaration>
+            <qualiteMandat>
+                <codCategorieMandat>PAR</codCategorieMandat>
+                <nomCategorieMandat>Parlementaire</nomCategorieMandat>
+            </qualiteMandat>
+            <organe>
+                <labelOrgane>Assemblée nationale</labelOrgane>
+            </organe>
+            <declarant>
+                <civilite>M.</civilite>
+                <nom>DUPONT</nom>
+                <prenom>Jean</prenom>
+                <dateNaissance>26/12/1970</dateNaissance>
+            </declarant>
+        </general>
+    </declaration>
+    <declaration>
+        <dateDepot>16/05/2025 18:30:42</dateDepot>
+        <uuid>decl-0002</uuid>
+        <participationFinanciereDto>
+            <neant>true</neant>
+        </participationFinanciereDto>
+        <valeursEnBourseDto>
+            <neant>true</neant>
+        </valeursEnBourseDto>
+        <participationDirigeantDto>
+            <neant>true</neant>
+        </participationDirigeantDto>
+        <general>
+            <typeDeclaration><id>DI</id></typeDeclaration>
+            <qualiteMandat>
+                <codCategorieMandat>LOC</codCategorieMandat>
+            </qualiteMandat>
+            <organe>
+                <labelOrgane>Mairie de Dupontville</labelOrgane>
+            </organe>
+            <declarant>
+                <civilite>Mme</civilite>
+                <nom>MARTIN</nom>
+                <prenom>Héloïse</prenom>
+                <dateNaissance>05/03/1985</dateNaissance>
+            </declarant>
+        </general>
+    </declaration>
+</declarations>
