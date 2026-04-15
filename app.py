@@ -59,6 +59,18 @@ def index(
     )
 
 
+@app.get("/company/{slug}", response_class=HTMLResponse)
+def company_page(
+    request: Request,
+    slug: str,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    company = queries.get_company(conn, slug)
+    if not company:
+        raise HTTPException(status_code=404, detail="company not found")
+    return templates.TemplateResponse(request, "company.html", {"company": company})
+
+
 @app.get("/party/{slug}", response_class=HTMLResponse)
 def party_page(
     request: Request,
@@ -78,6 +90,23 @@ def party_page(
 
 
 # -- JSON APIs ----------------------------------------------------------
+
+
+@app.get("/api/company/{slug}")
+def api_company(
+    slug: str, conn: sqlite3.Connection = Depends(get_conn)
+) -> JSONResponse:
+    company = queries.get_company(conn, slug)
+    if not company:
+        raise HTTPException(status_code=404, detail="company not found")
+    return JSONResponse(
+        {
+            "company": company,
+            "by_party": queries.company_by_party(conn, slug),
+            "holders": queries.company_holders(conn, slug),
+            "timeline": queries.company_timeline(conn, slug),
+        }
+    )
 
 
 @app.get("/api/party/{slug}")

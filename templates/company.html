@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% block title %}{{ company.name or company.slug }} — politics-viz{% endblock %}
+{% block main %}
+<p><a href="/">← Dashboard</a></p>
+<h1>{{ company.name or company.slug }}</h1>
+<p class="lede">
+    Total declared: <strong id="company-total">…</strong> ·
+    <span id="company-people">…</span> declarants ·
+    slug: <code>{{ company.slug }}</code>
+</p>
+
+<div class="grid">
+    <section class="card">
+        <h2>Declared € by party</h2>
+        <canvas id="chart-party"></canvas>
+    </section>
+    <section class="card">
+        <h2>Quarterly timeline</h2>
+        <canvas id="chart-timeline"></canvas>
+    </section>
+    <section class="card" style="grid-column: 1 / -1">
+        <h2>Holders</h2>
+        <table id="table-holders">
+            <thead><tr><th>Name</th><th>Party</th><th class="num">Declared €</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </section>
+</div>
+
+<script>
+(async function () {
+    const data = await pv.fetchJSON('/api/company/{{ company.slug }}');
+
+    document.getElementById('company-total').textContent = pv.formatEur(data.company.total);
+    document.getElementById('company-people').textContent = data.holders.length;
+
+    // Party breakdown bar
+    const bp = data.by_party;
+    new Chart(document.getElementById('chart-party').getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: bp.map(r => r.label),
+            datasets: [{
+                data: bp.map(r => r.total),
+                backgroundColor: bp.map(r => r.color),
+            }],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            onClick: (evt, items) => {
+                if (!items.length) return;
+                window.location = '/party/' + bp[items[0].index].slug;
+            },
+            scales: { y: { ticks: { callback: v => pv.formatEur(v) } } },
+        },
+    });
+
+    // Timeline line
+    const tl = data.timeline;
+    new Chart(document.getElementById('chart-timeline').getContext('2d'), {
+        type: 'line',
+        data: {
+            labels: tl.map(p => p.period),
+            datasets: [{
+                data: tl.map(p => p.total),
+                borderColor: '#0d378a', backgroundColor: '#0d378a33',
+                tension: 0.3, fill: true,
+            }],
+        },
+        options: {
+            responsive: true, maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: { y: { ticks: { callback: v => pv.formatEur(v) } } },
+        },
+    });
+
+    // Holders table
+    document.querySelector('#table-holders tbody').innerHTML = data.holders.map(h => `
+        <tr>
+            <td><a href="/declarant/${h.id}">${escapeHtml(h.prenom)} ${escapeHtml(h.nom)}</a></td>
+            <td><span class="party-pill" style="background:${h.party_color}">${escapeHtml(h.party_label)}</span></td>
+            <td class="num">${pv.formatEur(h.total)}</td>
+        </tr>`).join('');
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+})();
+</script>
+{% endblock %}

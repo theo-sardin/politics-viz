@@ -110,6 +110,94 @@ def top_companies_by_party(
     return {"companies": companies, "parties": parties, "matrix": matrix}
 
 
+def get_company(conn: sqlite3.Connection, slug: str) -> dict | None:
+    row = conn.execute(
+        """SELECT company_slug AS slug,
+                  MIN(company_name) AS name,
+                  SUM(evaluation_eur) AS total,
+                  COUNT(DISTINCT declaration_id) AS n_declarations
+           FROM holding
+           WHERE kind = 'participation_financiere'
+             AND company_slug = ?
+           GROUP BY company_slug""",
+        (slug,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def company_holders(conn: sqlite3.Connection, slug: str) -> list[dict]:
+    """Declarants who have declared holdings in *slug*, with their party + total."""
+    rows = conn.execute(
+        """
+        SELECT de.id AS id, de.nom AS nom, de.prenom AS prenom,
+               COALESCE(p.slug, 'none')    AS party_slug,
+               COALESCE(p.label, 'Non affilié / Local') AS party_label,
+               COALESCE(p.color, '#999999') AS party_color,
+               SUM(h.evaluation_eur)       AS total
+        FROM holding h
+        JOIN declaration d ON h.declaration_id = d.id
+        JOIN declarant   de ON d.declarant_id = de.id
+        LEFT JOIN party  p ON de.party_id = p.id
+        WHERE h.kind = 'participation_financiere'
+          AND h.company_slug = ?
+          AND h.evaluation_eur IS NOT NULL
+        GROUP BY de.id
+        ORDER BY total DESC
+        """,
+        (slug,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def company_by_party(conn: sqlite3.Connection, slug: str) -> list[dict]:
+    """Aggregate declared € in *slug* grouped by party."""
+    rows = conn.execute(
+        """
+        SELECT COALESCE(p.slug, 'none')    AS slug,
+               COALESCE(p.label, 'Non affilié / Local') AS label,
+               COALESCE(p.color, '#999999') AS color,
+               SUM(h.evaluation_eur)       AS total,
+               COUNT(DISTINCT de.id)       AS n_people
+        FROM holding h
+        JOIN declaration d ON h.declaration_id = d.id
+        JOIN declarant   de ON d.declarant_id = de.id
+        LEFT JOIN party  p ON de.party_id = p.id
+        WHERE h.kind = 'participation_financiere'
+          AND h.company_slug = ?
+          AND h.evaluation_eur IS NOT NULL
+        GROUP BY p.slug
+        ORDER BY total DESC
+        """,
+        (slug,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def company_timeline(conn: sqlite3.Connection, slug: str) -> list[dict]:
+    """Quarterly totals of declared € for *slug*, keyed on date_depot."""
+    rows = conn.execute(
+        """
+        SELECT substr(d.date_depot, 1, 4)                 AS year,
+               (CAST(substr(d.date_depot, 6, 2) AS INTEGER) - 1) / 3 + 1 AS quarter,
+               SUM(h.evaluation_eur)                      AS total,
+               COUNT(DISTINCT de.id)                      AS n_people
+        FROM holding h
+        JOIN declaration d ON h.declaration_id = d.id
+        JOIN declarant   de ON d.declarant_id = de.id
+        WHERE h.kind = 'participation_financiere'
+          AND h.company_slug = ?
+          AND h.evaluation_eur IS NOT NULL
+        GROUP BY year, quarter
+        ORDER BY year, quarter
+        """,
+        (slug,),
+    ).fetchall()
+    return [
+        {"period": f"{r['year']}-Q{r['quarter']}", "total": r["total"], "n_people": r["n_people"]}
+        for r in rows
+    ]
+
+
 def get_party(conn: sqlite3.Connection, slug: str) -> dict | None:
     row = conn.execute(
         "SELECT slug, label, color FROM party WHERE slug = ?", (slug,)
