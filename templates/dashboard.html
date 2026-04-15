@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — politics-viz{% endblock %}
+{% block main %}
+<h1>Dashboard</h1>
+<p class="lede">
+    {{ stats.declarants }} politicians ·
+    {{ stats.declarations }} declarations ·
+    {{ stats.holdings }} holdings.
+</p>
+<p>Dashboard cards are wired in the next task.</p>
+{% endblock %}
