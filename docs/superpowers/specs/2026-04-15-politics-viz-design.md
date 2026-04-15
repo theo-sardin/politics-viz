@@ -293,8 +293,10 @@ clock and doesn't OOM a laptop"** — no tight budget.
    cards populated. (User-facing — this one matters.)
 3. Drilldown: clicking a company bar on `/` navigates to
    `/company/{slug}` and renders timeline + holders.
-4. At least 80 % of current Assemblée nationale députés present in HATVP
-   are matched to their party (logged metric after `sync.py parties`).
+4. Parliamentarian party-match rate is logged after `sync.py parties`.
+   Floor: at least 60 % of NosDéputés entries resolve to a declarant
+   (the ceiling is data availability — many former deputies have no
+   HATVP declaration on file).
 5. Re-running `sync.py hatvp` on unchanged input is a no-op (no inserts).
 6. Total runtime JS payload per page (excluding CDN cache) is < 150 KB
    gzipped. (User-facing — this one matters.)
