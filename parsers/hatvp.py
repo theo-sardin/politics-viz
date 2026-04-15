@@ -37,6 +37,7 @@ class DeclarationRecord:
     uuid: str
     date_depot: str  # ISO 8601
     mandate_cat: str | None
+    mandate_type: str | None  # Député / Sénateur / Membre d'EPCI / ...
     organe_label: str | None
     nom: str
     prenom: str
@@ -69,12 +70,12 @@ def _parse_declaration(elem) -> DeclarationRecord | None:
     if not nom or not prenom:
         return None
 
+    qualite = general.find("qualiteMandat") if general is not None else None
     return DeclarationRecord(
         uuid=uuid,
         date_depot=_iso_datetime(_text(elem, "dateDepot")) or "",
-        mandate_cat=_text(general.find("qualiteMandat"), "codCategorieMandat")
-        if general is not None and general.find("qualiteMandat") is not None
-        else None,
+        mandate_cat=_text(qualite, "codCategorieMandat") if qualite is not None else None,
+        mandate_type=_clean(_text(qualite, "typeMandat")) if qualite is not None else None,
         organe_label=_text(general.find("organe"), "labelOrgane")
         if general is not None and general.find("organe") is not None
         else None,

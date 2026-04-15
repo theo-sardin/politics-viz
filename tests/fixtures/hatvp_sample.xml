@@ -58,6 +58,7 @@
             <qualiteMandat>
                 <codCategorieMandat>PAR</codCategorieMandat>
                 <nomCategorieMandat>Parlementaire</nomCategorieMandat>
+                <typeMandat>Député</typeMandat>
             </qualiteMandat>
             <organe>
                 <labelOrgane>Assemblée nationale</labelOrgane>
@@ -86,6 +87,7 @@
             <typeDeclaration><id>DI</id></typeDeclaration>
             <qualiteMandat>
                 <codCategorieMandat>LOC</codCategorieMandat>
+                <typeMandat>Maire ou adjoint municipal</typeMandat>
             </qualiteMandat>
             <organe>
                 <labelOrgane>Mairie de Dupontville</labelOrgane>

@@ -53,9 +53,16 @@ def _upsert_record(cur: sqlite3.Cursor, rec: DeclarationRecord) -> bool:
     declarant_id = _upsert_declarant(cur, rec)
     cur.execute(
         """INSERT INTO declaration
-           (declarant_id, raw_uuid, date_depot, mandate_cat, organe_label)
-           VALUES (?, ?, ?, ?, ?)""",
-        (declarant_id, rec.uuid, rec.date_depot, rec.mandate_cat, rec.organe_label),
+           (declarant_id, raw_uuid, date_depot, mandate_cat, mandate_type, organe_label)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (
+            declarant_id,
+            rec.uuid,
+            rec.date_depot,
+            rec.mandate_cat,
+            rec.mandate_type,
+            rec.organe_label,
+        ),
     )
     declaration_id = cur.lastrowid
     for h in rec.holdings:

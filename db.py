@@ -32,7 +32,8 @@ CREATE TABLE IF NOT EXISTS declaration (
     declarant_id  INTEGER NOT NULL REFERENCES declarant(id),
     raw_uuid      TEXT NOT NULL UNIQUE,
     date_depot    TEXT NOT NULL,
-    mandate_cat   TEXT,
+    mandate_cat   TEXT,   -- coarse: LOC / PAR / EUR / ...
+    mandate_type  TEXT,   -- fine:   Député / Sénateur / Membre d'EPCI / ...
     organe_label  TEXT
 );
 

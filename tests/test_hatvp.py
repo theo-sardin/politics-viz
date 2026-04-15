@@ -22,8 +22,12 @@ def test_declarant_fields():
 
 def test_mandate_and_organe():
     r1, r2 = _records()
-    assert (r1.mandate_cat, r1.organe_label) == ("PAR", "Assemblée nationale")
-    assert (r2.mandate_cat, r2.organe_label) == ("LOC", "Mairie de Dupontville")
+    assert (r1.mandate_cat, r1.mandate_type, r1.organe_label) == (
+        "PAR", "Député", "Assemblée nationale"
+    )
+    assert (r2.mandate_cat, r2.mandate_type, r2.organe_label) == (
+        "LOC", "Maire ou adjoint municipal", "Mairie de Dupontville"
+    )
 
 
 def test_date_depot_iso():
