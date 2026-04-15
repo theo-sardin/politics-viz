@@ -26,6 +26,11 @@
                     <nomSociete>0</nomSociete>
                     <evaluation>0</evaluation>
                 </items>
+                <items>
+                    <commentaire/>
+                    <nomSociete>[Données non publiées]</nomSociete>
+                    <evaluation>999</evaluation>
+                </items>
             </items>
             <neant>false</neant>
         </participationFinanciereDto>

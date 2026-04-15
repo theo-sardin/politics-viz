@@ -95,13 +95,14 @@ def _iter_holdings(elem) -> Iterator[Holding]:
 
 def _iter_participation_financiere(elem) -> Iterator[Holding]:
     for item in _items(elem, "participationFinanciereDto"):
-        name = _text(item, "nomSociete")
-        if not name or name.strip() in ("0", "neant"):
+        name = _clean(_text(item, "nomSociete"))
+        slug = _identifiable_slug(name)
+        if slug is None:
             continue
         yield Holding(
             kind="participation_financiere",
-            company_name=_clean(name),
-            company_slug=company_slug(name),
+            company_name=name,
+            company_slug=slug,
             evaluation_eur=_parse_eur(_text(item, "evaluation")),
             capital_pct=_parse_float(_text(item, "capitalDetenu")),
             nb_parts=_parse_int(_text(item, "nombreParts")),
@@ -111,13 +112,14 @@ def _iter_participation_financiere(elem) -> Iterator[Holding]:
 
 def _iter_valeurs_bourse(elem) -> Iterator[Holding]:
     for item in _items(elem, "valeursEnBourseDto"):
-        etab = _text(item, "etablissement")
-        if not etab:
+        etab = _clean(_text(item, "etablissement"))
+        slug = _identifiable_slug(etab)
+        if slug is None:
             continue
         yield Holding(
             kind="valeur_bourse",
-            company_name=_clean(etab),
-            company_slug=company_slug(etab),
+            company_name=etab,
+            company_slug=slug,
             evaluation_eur=_parse_eur(_text(item, "valeur")),
             capital_pct=None,
             nb_parts=None,
@@ -127,18 +129,37 @@ def _iter_valeurs_bourse(elem) -> Iterator[Holding]:
 
 def _iter_participation_dirigeant(elem) -> Iterator[Holding]:
     for item in _items(elem, "participationDirigeantDto"):
-        name = _text(item, "nomSociete")
-        if not name or name.strip() in ("0", "neant"):
+        name = _clean(_text(item, "nomSociete"))
+        slug = _identifiable_slug(name)
+        if slug is None:
             continue
         yield Holding(
             kind="participation_dirigeant",
-            company_name=_clean(name),
-            company_slug=company_slug(name),
+            company_name=name,
+            company_slug=slug,
             evaluation_eur=None,
             capital_pct=None,
             nb_parts=None,
             commentaire=_clean(_text(item, "activite")),
         )
+
+
+def _identifiable_slug(name: str | None) -> str | None:
+    """Return a usable slug, or None if the entry is a placeholder / generic.
+
+    Drops:
+      - empty / '0' / 'neant' placeholders
+      - fully-redacted entries ('[Données non publiées]')
+      - names that reduce to an empty slug after suffix stripping (e.g.
+        a raw 'SCI' with no actual name)
+    """
+    if not name:
+        return None
+    stripped = name.strip().lower()
+    if stripped in ("0", "neant"):
+        return None
+    slug = company_slug(name)
+    return slug or None
 
 
 def _items(decl, wrapper_tag: str):
