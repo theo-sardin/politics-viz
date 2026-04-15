@@ -1,11 +1,87 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — politics-viz{% endblock %}
 {% block main %}
-<h1>Dashboard</h1>
+<h1>Politicians' declared holdings</h1>
 <p class="lede">
-    {{ stats.declarants }} politicians ·
-    {{ stats.declarations }} declarations ·
-    {{ stats.holdings }} holdings.
+    {{ '{:,}'.format(stats.declarants) }} politicians ·
+    {{ '{:,}'.format(stats.declarations) }} declarations ·
+    {{ '{:,}'.format(stats.holdings) }} holdings ·
+    source: HATVP.
 </p>
-<p>Dashboard cards are wired in the next task.</p>
+
+<div class="window-selector">
+    <a href="/?window=12m" class="{% if window == '12m' %}active{% endif %}">12 months</a>
+    <a href="/?window=24m" class="{% if window == '24m' %}active{% endif %}">24 months</a>
+    <a href="/?window=all" class="{% if window == 'all' %}active{% endif %}">All time</a>
+</div>
+
+<div class="grid">
+    <section class="card">
+        <h2>Top 20 companies by declared €</h2>
+        <canvas id="chart-top"></canvas>
+    </section>
+    <section class="card">
+        <h2>Top 20, stacked by party</h2>
+        <canvas id="chart-stack"></canvas>
+    </section>
+    <section class="card">
+        <h2>Recent new positions</h2>
+        <table id="table-new">
+            <thead><tr><th>Company</th><th class="num">Holders</th><th class="num">Total €</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </section>
+    <section class="card">
+        <h2>Biggest position growths</h2>
+        <table id="table-grown">
+            <thead><tr><th>Company</th><th class="num">Holders</th><th class="num">Δ €</th></tr></thead>
+            <tbody></tbody>
+        </table>
+    </section>
+</div>
+
+<script>
+(async function () {
+    const data = await pv.fetchJSON('/api/dashboard?window={{ window }}');
+
+    // Card 1: top companies (single bar)
+    const top = data.top_companies;
+    pv.barChart(document.getElementById('chart-top'), {
+        labels: top.map(c => c.name || c.slug),
+        data: top.map(c => c.total),
+        onBarClick: (i) => { window.location = '/company/' + top[i].slug; },
+    });
+
+    // Card 2: stacked-by-party
+    const tbp = data.top_by_party;
+    pv.stackedBarChart(document.getElementById('chart-stack'), {
+        labels: tbp.companies.map(c => c.name || c.slug),
+        datasets: tbp.parties.map((p, pi) => ({
+            label: p.label,
+            backgroundColor: p.color,
+            data: tbp.matrix.map(row => row[pi]),
+        })),
+        onBarClick: (i) => { window.location = '/company/' + tbp.companies[i].slug; },
+    });
+
+    // Card 3 + 4: tables
+    fillTable('table-new', data.surges_new);
+    fillTable('table-grown', data.surges_grown);
+
+    function fillTable(id, rows) {
+        const tbody = document.querySelector('#' + id + ' tbody');
+        tbody.innerHTML = rows.map(r => `
+            <tr>
+                <td><a href="/company/${r.slug}">${escapeHtml(r.name || r.slug)}</a></td>
+                <td class="num">${r.n_people}</td>
+                <td class="num">${pv.formatEur(r.total)}</td>
+            </tr>
+        `).join('');
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+})();
+</script>
 {% endblock %}
