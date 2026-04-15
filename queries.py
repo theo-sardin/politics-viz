@@ -110,6 +110,89 @@ def top_companies_by_party(
     return {"companies": companies, "parties": parties, "matrix": matrix}
 
 
+def get_party(conn: sqlite3.Connection, slug: str) -> dict | None:
+    row = conn.execute(
+        "SELECT slug, label, color FROM party WHERE slug = ?", (slug,)
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def party_top_companies(
+    conn: sqlite3.Connection, slug: str, window: Window, limit: int = 20
+) -> list[dict]:
+    """Top companies declared by members of *slug*."""
+    start = window_start(conn, window)
+    rows = conn.execute(
+        """
+        SELECT h.company_slug              AS slug,
+               MIN(h.company_name)         AS name,
+               SUM(h.evaluation_eur)       AS total,
+               COUNT(DISTINCT d.declarant_id) AS n_people
+        FROM holding h
+        JOIN declaration d ON h.declaration_id = d.id
+        JOIN declarant  de ON d.declarant_id = de.id
+        JOIN party      p  ON de.party_id = p.id
+        WHERE h.kind = 'participation_financiere'
+          AND h.evaluation_eur IS NOT NULL
+          AND h.company_slug <> ''
+          AND p.slug = ?
+          AND d.date_depot >= ?
+        GROUP BY h.company_slug
+        ORDER BY total DESC
+        LIMIT ?
+        """,
+        (slug, start, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def party_members(conn: sqlite3.Connection, slug: str) -> list[dict]:
+    """All declarants of *slug*, with aggregate declared € for context."""
+    rows = conn.execute(
+        """
+        SELECT de.id AS id, de.nom AS nom, de.prenom AS prenom,
+               COALESCE(SUM(h.evaluation_eur), 0) AS total
+        FROM declarant de
+        JOIN party p ON de.party_id = p.id
+        LEFT JOIN declaration d ON d.declarant_id = de.id
+        LEFT JOIN holding h ON h.declaration_id = d.id
+             AND h.kind = 'participation_financiere'
+             AND h.evaluation_eur IS NOT NULL
+        WHERE p.slug = ?
+        GROUP BY de.id
+        ORDER BY total DESC, de.nom
+        """,
+        (slug,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def party_surges(
+    conn: sqlite3.Connection, slug: str, window: Window, limit: int = 20
+) -> list[dict]:
+    start = window_start(conn, window)
+    rows = conn.execute(
+        """
+        SELECT hc.company_slug AS slug,
+               (SELECT MIN(h.company_name) FROM holding h
+                WHERE h.company_slug = hc.company_slug) AS name,
+               hc.change_type AS change_type,
+               hc.delta_eur AS delta
+        FROM holding_change hc
+        JOIN declarant  de ON hc.declarant_id = de.id
+        JOIN party      p  ON de.party_id = p.id
+        JOIN declaration d ON hc.curr_decl_id = d.id
+        WHERE p.slug = ?
+          AND d.date_depot >= ?
+          AND hc.change_type IN ('new', 'grown')
+        ORDER BY hc.delta_eur DESC
+        LIMIT ?
+        """,
+        (slug, start, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def surges(
     conn: sqlite3.Connection, window: Window, change_type: str, limit: int = 20
 ) -> list[dict]:

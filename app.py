@@ -59,7 +59,46 @@ def index(
     )
 
 
+@app.get("/party/{slug}", response_class=HTMLResponse)
+def party_page(
+    request: Request,
+    slug: str,
+    window: str = Query("12m"),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    window = _validate_window(window)
+    party = queries.get_party(conn, slug)
+    if not party:
+        raise HTTPException(status_code=404, detail="party not found")
+    return templates.TemplateResponse(
+        request,
+        "party.html",
+        {"party": party, "window": window},
+    )
+
+
 # -- JSON APIs ----------------------------------------------------------
+
+
+@app.get("/api/party/{slug}")
+def api_party(
+    slug: str,
+    window: str = Query("12m"),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> JSONResponse:
+    window = _validate_window(window)
+    party = queries.get_party(conn, slug)
+    if not party:
+        raise HTTPException(status_code=404, detail="party not found")
+    return JSONResponse(
+        {
+            "party": party,
+            "window": window,
+            "top_companies": queries.party_top_companies(conn, slug, window),
+            "members": queries.party_members(conn, slug),
+            "surges": queries.party_surges(conn, slug, window),
+        }
+    )
 
 
 @app.get("/api/dashboard")
