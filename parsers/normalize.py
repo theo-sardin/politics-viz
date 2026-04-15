@@ -10,7 +10,12 @@ import re
 import unicodedata
 
 _COMPANY_SUFFIXES = re.compile(
-    r"\b(sasu|sarl|sci|sas|sa|eurl|scp|scm|scs|snc|sc|sca)\b",
+    # Generic legal forms and financial wrappers. A declaration of
+    # just "GFA" or "PEA" with no actual name slugs to empty and is
+    # dropped by _identifiable_slug in the parser.
+    r"\b(sasu|sarl|sci|sas|sa|eurl|scp|scm|scs|snc|sc|sca"
+    r"|gfa|gfv|gfr|gfp|scea|gaec|earl|selarl|sccv|sicav|sccp"
+    r"|fcpi|fcpr|fcp|gie|pea)\b",
     re.IGNORECASE,
 )
 _NON_WORD = re.compile(r"[^a-z0-9]+")

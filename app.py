@@ -17,9 +17,19 @@ import queries
 BASE_DIR = Path(__file__).parent
 DB_PATH = os.environ.get("POLITICS_DB", str(BASE_DIR / "data.sqlite"))
 
+# Cache-bust static assets on restart so edits reach the browser without
+# manual hard-refresh. Cheap enough to compute once at import time.
+ASSET_VERSION = str(
+    max(
+        (BASE_DIR / "static" / name).stat().st_mtime_ns
+        for name in ("style.css", "app.js")
+    )
+)
+
 app = FastAPI(title="politics-viz", docs_url=None, redoc_url=None)
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
+templates.env.globals["asset_version"] = ASSET_VERSION
 
 
 def get_conn() -> sqlite3.Connection:
@@ -31,6 +41,7 @@ def get_conn() -> sqlite3.Connection:
 
 
 WINDOWS = {"12m", "24m", "all"}
+SCOPES = {"an", "senat", "parl", "all"}
 
 
 def _validate_window(window: str) -> str:
@@ -39,24 +50,43 @@ def _validate_window(window: str) -> str:
     return window
 
 
+def _validate_scope(scope: str) -> str:
+    if scope not in SCOPES:
+        raise HTTPException(status_code=400, detail=f"scope must be one of {sorted(SCOPES)}")
+    return scope
+
+
 # -- pages --------------------------------------------------------------
 
 
 @app.get("/", response_class=HTMLResponse)
 def index(
     request: Request,
-    window: str = Query("12m"),
+    window: str = Query("all"),
+    scope: str = Query("an"),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     window = _validate_window(window)
-    stats = {
-        "declarants": conn.execute("SELECT COUNT(*) FROM declarant").fetchone()[0],
-        "declarations": conn.execute("SELECT COUNT(*) FROM declaration").fetchone()[0],
-        "holdings": conn.execute("SELECT COUNT(*) FROM holding").fetchone()[0],
-    }
+    scope = _validate_scope(scope)
+    stats = _scope_stats(conn, scope)
     return templates.TemplateResponse(
-        request, "dashboard.html", {"stats": stats, "window": window}
+        request,
+        "dashboard.html",
+        {"stats": stats, "window": window, "scope": scope},
     )
+
+
+def _scope_stats(conn: sqlite3.Connection, scope: str) -> dict:
+    clause = queries.scope_clause(scope)
+    row = conn.execute(
+        f"""SELECT COUNT(DISTINCT d.declarant_id) AS declarants,
+                   COUNT(DISTINCT d.id)           AS declarations,
+                   COUNT(h.id)                    AS holdings
+            FROM declaration d
+            LEFT JOIN holding h ON h.declaration_id = d.id
+            WHERE {clause}"""
+    ).fetchone()
+    return dict(row)
 
 
 @app.get("/declarant/{declarant_id}", response_class=HTMLResponse)
@@ -152,16 +182,20 @@ def api_party(
 
 @app.get("/api/dashboard")
 def api_dashboard(
-    window: str = Query("12m"), conn: sqlite3.Connection = Depends(get_conn)
+    window: str = Query("all"),
+    scope: str = Query("an"),
+    conn: sqlite3.Connection = Depends(get_conn),
 ) -> JSONResponse:
     window = _validate_window(window)
+    scope = _validate_scope(scope)
     return JSONResponse(
         {
             "window": window,
-            "top_companies": queries.top_companies(conn, window),
-            "top_by_party": queries.top_companies_by_party(conn, window),
-            "surges_new": queries.surges(conn, window, "new"),
-            "surges_grown": queries.surges(conn, window, "grown"),
+            "scope": scope,
+            "top_companies": queries.top_companies(conn, window, scope=scope),
+            "top_by_party": queries.top_companies_by_party(conn, window, scope=scope),
+            "surges_new": queries.surges(conn, window, "new", scope=scope),
+            "surges_grown": queries.surges(conn, window, "grown", scope=scope),
         }
     )
 

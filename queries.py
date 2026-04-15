@@ -11,10 +11,27 @@ from datetime import datetime, timedelta
 from typing import Literal
 
 Window = Literal["12m", "24m", "all"]
+Scope = Literal["an", "senat", "parl", "all"]
 
 # Sentinel used when the caller wants no lower bound. Anything greater-than
 # this is always true in lexical ISO-date comparison.
 _MIN_DATE = "0000-01-01T00:00:00"
+
+# SQL-injectable-looking but safe: these strings are baked into queries,
+# not user-supplied — ``scope_clause`` raises on anything unknown.
+_SCOPE_CLAUSES: dict[str, str] = {
+    "an":    "d.mandate_type = 'Député'",
+    "senat": "d.mandate_type = 'Sénateur'",
+    "parl":  "d.mandate_type IN ('Député', 'Sénateur')",
+    "all":   "1=1",
+}
+
+
+def scope_clause(scope: Scope) -> str:
+    clause = _SCOPE_CLAUSES.get(scope)
+    if clause is None:
+        raise ValueError(f"unknown scope: {scope!r}")
+    return clause
 
 
 def window_start(conn: sqlite3.Connection, window: Window) -> str:
@@ -29,10 +46,23 @@ def window_start(conn: sqlite3.Connection, window: Window) -> str:
     return (max_dt - timedelta(days=months * 30)).isoformat()
 
 
-def top_companies(conn: sqlite3.Connection, window: Window, limit: int = 20) -> list[dict]:
+def top_companies(
+    conn: sqlite3.Connection,
+    window: Window,
+    scope: Scope = "an",
+    limit: int = 10,
+    min_holders: int = 2,
+) -> list[dict]:
+    """Top companies by SUM(evaluation_eur) within a scope, filtered to
+    those held by at least *min_holders* distinct declarants.
+
+    The min-holders filter hides single-individual outliers (one wealthy
+    declarant's personal SCI valued at tens of millions) so the dashboard
+    surfaces companies with collective holding patterns.
+    """
     start = window_start(conn, window)
     rows = conn.execute(
-        """
+        f"""
         SELECT h.company_slug          AS slug,
                MIN(h.company_name)     AS name,
                SUM(h.evaluation_eur)   AS total,
@@ -43,17 +73,19 @@ def top_companies(conn: sqlite3.Connection, window: Window, limit: int = 20) -> 
           AND h.evaluation_eur IS NOT NULL
           AND h.company_slug <> ''
           AND d.date_depot >= ?
+          AND {scope_clause(scope)}
         GROUP BY h.company_slug
+        HAVING n_people >= ?
         ORDER BY total DESC
         LIMIT ?
         """,
-        (start, limit),
+        (start, min_holders, limit),
     ).fetchall()
     return [dict(r) for r in rows]
 
 
 def top_companies_by_party(
-    conn: sqlite3.Connection, window: Window, limit: int = 20
+    conn: sqlite3.Connection, window: Window, scope: Scope = "an", limit: int = 10
 ) -> dict:
     """Top-N companies with per-party euro breakdowns.
 
@@ -64,7 +96,7 @@ def top_companies_by_party(
         'matrix':    [[eur_for_party_j_on_company_i, ...], ...]
       }
     """
-    companies = top_companies(conn, window, limit)
+    companies = top_companies(conn, window, scope=scope, limit=limit)
     if not companies:
         return {"companies": [], "parties": [], "matrix": []}
 
@@ -87,6 +119,7 @@ def top_companies_by_party(
           AND h.evaluation_eur IS NOT NULL
           AND h.company_slug IN ({placeholders})
           AND d.date_depot >= ?
+          AND {scope_clause(scope)}
         GROUP BY h.company_slug, party_slug
         """,
         [*slugs, start],
@@ -338,7 +371,11 @@ def party_surges(
 
 
 def surges(
-    conn: sqlite3.Connection, window: Window, change_type: str, limit: int = 20
+    conn: sqlite3.Connection,
+    window: Window,
+    change_type: str,
+    scope: Scope = "an",
+    limit: int = 10,
 ) -> list[dict]:
     """Top companies by aggregate delta_eur for a given change_type.
 
@@ -359,6 +396,7 @@ def surges(
         JOIN declaration d ON hc.curr_decl_id = d.id
         WHERE hc.change_type = ?
           AND d.date_depot >= ?
+          AND {scope_clause(scope)}
         GROUP BY hc.company_slug
         ORDER BY {order}
         LIMIT ?
