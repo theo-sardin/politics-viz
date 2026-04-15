@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ decl.prenom }} {{ decl.nom }} — politics-viz{% endblock %}
+{% block main %}
+<p><a href="/">← Dashboard</a></p>
+<h1>{{ decl.prenom }} {{ decl.nom }}</h1>
+<p class="lede">
+    {% if decl.party_slug %}
+        <a href="/party/{{ decl.party_slug }}" class="party-pill" style="background: {{ decl.party_color }}; text-decoration: none;">{{ decl.party_label }}</a>
+    {% else %}
+        <span class="party-pill" style="background: #999">Non affilié / Local</span>
+    {% endif %}
+    {% if decl.date_naissance %} · né(e) {{ decl.date_naissance }}{% endif %}
+</p>
+
+{% if changes %}
+<section class="card" style="margin-bottom: 1rem">
+    <h2>Change log ({{ changes | length }})</h2>
+    <table>
+        <thead><tr><th>Date</th><th>Company</th><th>Type</th><th class="num">Δ €</th></tr></thead>
+        <tbody>
+        {% for c in changes %}
+            <tr>
+                <td>{{ c.date_depot[:10] }}</td>
+                <td><a href="/company/{{ c.slug }}">{{ c.name or c.slug }}</a></td>
+                <td>{{ c.change_type }}</td>
+                <td class="num">{{ '{:+,}'.format(c.delta or 0) }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endif %}
+
+<h2>Declarations ({{ declarations | length }})</h2>
+{% for d in declarations %}
+<section class="card" style="margin-bottom: 1rem">
+    <h2>{{ d.date_depot[:10] }} — {{ d.mandate_cat or '—' }} / {{ d.organe_label or '—' }}</h2>
+    {% if d.holdings %}
+    <table>
+        <thead>
+            <tr><th>Kind</th><th>Company</th><th class="num">€</th><th class="num">% capital</th><th class="num">Parts</th><th>Note</th></tr>
+        </thead>
+        <tbody>
+        {% for h in d.holdings %}
+            <tr>
+                <td><code>{{ h.kind }}</code></td>
+                <td>{% if h.company_slug %}<a href="/company/{{ h.company_slug }}">{{ h.company_name or h.company_slug }}</a>{% else %}{{ h.company_name or '—' }}{% endif %}</td>
+                <td class="num">{{ '{:,}'.format(h.evaluation_eur) if h.evaluation_eur is not none else '—' }}</td>
+                <td class="num">{{ '{:g}'.format(h.capital_pct) if h.capital_pct is not none else '—' }}</td>
+                <td class="num">{{ h.nb_parts if h.nb_parts is not none else '—' }}</td>
+                <td>{{ h.raw_commentaire or '' }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="lede">No holdings declared.</p>
+    {% endif %}
+</section>
+{% endfor %}
+{% endblock %}

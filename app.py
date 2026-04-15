@@ -59,6 +59,26 @@ def index(
     )
 
 
+@app.get("/declarant/{declarant_id}", response_class=HTMLResponse)
+def declarant_page(
+    request: Request,
+    declarant_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    decl = queries.get_declarant(conn, declarant_id)
+    if not decl:
+        raise HTTPException(status_code=404, detail="declarant not found")
+    return templates.TemplateResponse(
+        request,
+        "declarant.html",
+        {
+            "decl": decl,
+            "declarations": queries.declarant_declarations(conn, declarant_id),
+            "changes": queries.declarant_changes(conn, declarant_id),
+        },
+    )
+
+
 @app.get("/company/{slug}", response_class=HTMLResponse)
 def company_page(
     request: Request,

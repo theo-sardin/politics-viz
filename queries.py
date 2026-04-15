@@ -110,6 +110,62 @@ def top_companies_by_party(
     return {"companies": companies, "parties": parties, "matrix": matrix}
 
 
+def get_declarant(conn: sqlite3.Connection, declarant_id: int) -> dict | None:
+    row = conn.execute(
+        """SELECT de.id, de.nom, de.prenom, de.date_naissance,
+                  p.slug  AS party_slug,
+                  p.label AS party_label,
+                  p.color AS party_color
+           FROM declarant de
+           LEFT JOIN party p ON de.party_id = p.id
+           WHERE de.id = ?""",
+        (declarant_id,),
+    ).fetchone()
+    return dict(row) if row else None
+
+
+def declarant_declarations(conn: sqlite3.Connection, declarant_id: int) -> list[dict]:
+    rows = conn.execute(
+        """SELECT id, date_depot, mandate_cat, organe_label
+           FROM declaration
+           WHERE declarant_id = ?
+           ORDER BY date_depot""",
+        (declarant_id,),
+    ).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["holdings"] = [
+            dict(h)
+            for h in conn.execute(
+                """SELECT kind, company_slug, company_name, evaluation_eur,
+                          capital_pct, nb_parts, raw_commentaire
+                   FROM holding WHERE declaration_id = ?
+                   ORDER BY kind, company_slug""",
+                (r["id"],),
+            )
+        ]
+        out.append(d)
+    return out
+
+
+def declarant_changes(conn: sqlite3.Connection, declarant_id: int) -> list[dict]:
+    rows = conn.execute(
+        """SELECT hc.company_slug AS slug,
+                  (SELECT MIN(h.company_name) FROM holding h
+                   WHERE h.company_slug = hc.company_slug) AS name,
+                  hc.change_type AS change_type,
+                  hc.delta_eur   AS delta,
+                  d.date_depot   AS date_depot
+           FROM holding_change hc
+           JOIN declaration d ON hc.curr_decl_id = d.id
+           WHERE hc.declarant_id = ?
+           ORDER BY d.date_depot DESC""",
+        (declarant_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_company(conn: sqlite3.Connection, slug: str) -> dict | None:
     row = conn.execute(
         """SELECT company_slug AS slug,
