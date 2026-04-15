@@ -18,28 +18,34 @@
 <div class="grid">
     <section class="card">
         <h2>Top 20 companies by declared €</h2>
-        <canvas id="chart-top"></canvas>
+        <div class="chart-box"><canvas id="chart-top"></canvas></div>
     </section>
     <section class="card">
         <h2>Top 20, stacked by party</h2>
-        <canvas id="chart-stack"></canvas>
+        <div class="chart-box"><canvas id="chart-stack"></canvas></div>
     </section>
     <section class="card">
         <h2>Recent new positions</h2>
-        <table id="table-new">
-            <thead><tr><th>Company</th><th class="num">Holders</th><th class="num">Total €</th></tr></thead>
-            <tbody></tbody>
-        </table>
+        <div class="scroll">
+            <table id="table-new">
+                <thead><tr><th>Company</th><th class="num">Holders</th><th class="num">Total €</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </section>
     <section class="card">
         <h2>Biggest position growths</h2>
-        <table id="table-grown">
-            <thead><tr><th>Company</th><th class="num">Holders</th><th class="num">Δ €</th></tr></thead>
-            <tbody></tbody>
-        </table>
+        <div class="scroll">
+            <table id="table-grown">
+                <thead><tr><th>Company</th><th class="num">Holders</th><th class="num">Δ €</th></tr></thead>
+                <tbody></tbody>
+            </table>
+        </div>
     </section>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
 (async function () {
     const data = await pv.fetchJSON('/api/dashboard?window={{ window }}');
@@ -85,3 +91,4 @@
 })();
 </script>
 {% endblock %}
+

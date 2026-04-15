@@ -15,7 +15,7 @@
 <div class="grid">
     <section class="card">
         <h2>Top 20 companies held by members</h2>
-        <canvas id="chart-top"></canvas>
+        <div class="chart-box"><canvas id="chart-top"></canvas></div>
     </section>
     <section class="card">
         <h2>New &amp; growth surges (window)</h2>
@@ -32,7 +32,9 @@
         </table>
     </section>
 </div>
+{% endblock %}
 
+{% block scripts %}
 <script>
 (async function () {
     const data = await pv.fetchJSON('/api/party/{{ party.slug }}?window={{ window }}');
@@ -67,3 +69,4 @@
 })();
 </script>
 {% endblock %}
+
