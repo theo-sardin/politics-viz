@@ -35,7 +35,7 @@ header {
     display: flex;
     align-items: baseline;
     gap: 2rem;
-    padding: 0.9rem 1.5rem;
+    padding: 0.6rem 1.5rem;
     border-bottom: 1px solid var(--border);
     background: var(--card-bg);
 }
@@ -56,52 +56,78 @@ nav a {
 nav a:hover { color: var(--fg); }
 
 main {
-    max-width: 1200px;
+    max-width: 1280px;
     margin: 0 auto;
-    padding: 1.5rem;
+    padding: 1rem 1.5rem 1.5rem;
 }
 
-h1 { margin: 0 0 0.5rem; }
+h1 { margin: 0 0 0.25rem; font-size: 1.4rem; }
 
 .lede {
     color: var(--muted);
-    margin-top: 0;
+    margin: 0 0 0.75rem;
+    font-size: 0.9rem;
 }
 
 footer {
-    padding: 1.5rem;
+    padding: 0.5rem;
     color: var(--muted);
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     text-align: center;
     border-top: 1px solid var(--border);
-    margin-top: 3rem;
+    margin-top: 0.75rem;
 }
+
+footer p { margin: 0; }
 
 a { color: var(--accent); }
 
-/* cards grid (used by dashboard in the next task) */
+/* 2×2 on wide screens, collapses to a single column under 720px. */
 .grid {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(420px, 1fr));
-    gap: 1rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.75rem;
+}
+
+@media (max-width: 720px) {
+    .grid { grid-template-columns: 1fr; }
+}
+
+/* Table cards on the dashboard scroll internally instead of growing. */
+.card .scroll {
+    overflow-y: auto;
+    max-height: clamp(200px, calc((100vh - 400px) / 2), 340px);
 }
 
 .card {
     background: var(--card-bg);
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 1rem 1.25rem;
+    padding: 0.75rem 1rem;
 }
 
 .card h2 {
-    margin: 0 0 0.5rem;
-    font-size: 1rem;
+    margin: 0 0 0.4rem;
+    font-size: 0.85rem;
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: var(--muted);
 }
 
-.card canvas { width: 100% !important; height: 320px !important; }
+/* Chart.js reads the parent's client size for layout. Give the wrapper a
+   bounded, explicit height so the canvas doesn't run away. */
+.chart-box {
+    position: relative;
+    width: 100%;
+    height: clamp(200px, calc((100vh - 400px) / 2), 340px);
+}
+
+.chart-box canvas {
+    position: absolute;
+    inset: 0;
+    width: 100% !important;
+    height: 100% !important;
+}
 
 .window-selector {
     display: inline-flex;
@@ -109,7 +135,7 @@ a { color: var(--accent); }
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 0.15rem;
-    margin-bottom: 1rem;
+    margin-bottom: 0.75rem;
 }
 
 .window-selector a {
