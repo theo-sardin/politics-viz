@@ -506,77 +506,100 @@ def declarant_conflicts(conn: sqlite3.Connection, declarant_id: int) -> list[dic
 
 _SPECTRUM_ORDER = """
     CASE COALESCE(p.slug, 'none')
-        WHEN 'lfi' THEN 1  WHEN 'pcf' THEN 2  WHEN 'eelv' THEN 3
-        WHEN 'ps' THEN 4   WHEN 'liot' THEN 5  WHEN 'renaissance' THEN 6
-        WHEN 'modem' THEN 7 WHEN 'horizons' THEN 8 WHEN 'udi' THEN 9
-        WHEN 'lr' THEN 10  WHEN 'rn' THEN 11  WHEN 'rec' THEN 12
+        WHEN 'lfi' THEN 1
+        WHEN 'pcf' THEN 2   WHEN 'gdr' THEN 2
+        WHEN 'ecos' THEN 3  WHEN 'eelv' THEN 3
+        WHEN 'ps' THEN 4
+        WHEN 'liot' THEN 5
+        WHEN 'epr' THEN 6   WHEN 'renaissance' THEN 6
+        WHEN 'dem' THEN 7   WHEN 'modem' THEN 7
+        WHEN 'horizons' THEN 8
+        WHEN 'udr' THEN 9   WHEN 'udi' THEN 9
+        WHEN 'dr' THEN 10   WHEN 'lr' THEN 10
+        WHEN 'rn' THEN 11
+        WHEN 'rec' THEN 12
         ELSE 6
     END
 """
 
+# For the hemicycle, the source of truth is party_source — this tells us
+# who actually sits, regardless of whether they've filed HATVP declarations.
+_ROSTER_FILTERS: dict[str, str] = {
+    "an": "de.party_source = 'an_opendata'",
+    "senat": "de.party_source = 'senat'",
+    "parl": "de.party_source IN ('an_opendata', 'senat')",
+}
 
-def hemicycle_groups(conn: sqlite3.Connection, scope: Scope = "an", asof: str | None = None) -> list[dict]:
+
+def hemicycle_groups(conn: sqlite3.Connection, scope: Scope = "an") -> list[dict]:
     """Party-level aggregates for the hemicycle.
 
     Returns [{slug, label, color, n_seats, total_eur}] sorted left→right.
-    Only includes declarants with at least one declaration filed by *asof*.
+    For AN/Sénat/Parl scopes, uses the authoritative roster (party_source)
+    so ALL members appear regardless of whether they've filed HATVP declarations.
     """
-    cutoff = _next_month(asof)
+    roster = _ROSTER_FILTERS.get(scope)
+    if roster:
+        where = roster
+        params = ()
+    else:
+        # scope=all: fall back to declaration-based filter
+        where = f"EXISTS (SELECT 1 FROM declaration dd WHERE dd.declarant_id = de.id AND {scope_clause(scope)})"
+        params = ()
+
     rows = conn.execute(
         f"""
         SELECT COALESCE(p.slug, 'none')    AS slug,
-               COALESCE(p.label, 'Non affilié') AS label,
+               COALESCE(p.label, 'Non inscrit') AS label,
                COALESCE(p.color, '#999999') AS color,
                COUNT(DISTINCT de.id)        AS n_seats,
                COALESCE(SUM(h.evaluation_eur), 0) AS total_eur
         FROM declarant de
         LEFT JOIN party p ON de.party_id = p.id
         LEFT JOIN declaration d ON d.declarant_id = de.id
-             AND {scope_clause(scope)} AND d.date_depot < ?
         LEFT JOIN holding h ON h.declaration_id = d.id
              AND h.kind = 'participation_financiere'
-        WHERE EXISTS (
-            SELECT 1 FROM declaration dd
-            WHERE dd.declarant_id = de.id AND {scope_clause(scope)}
-              AND dd.date_depot < ?
-        )
+        WHERE {where}
         GROUP BY COALESCE(p.slug, 'none')
         ORDER BY {_SPECTRUM_ORDER}
         """,
-        (cutoff, cutoff),
+        params,
     ).fetchall()
     return [dict(r) for r in rows]
 
 
-def hemicycle(conn: sqlite3.Connection, scope: Scope = "an", asof: str | None = None) -> list[dict]:
-    """All declarants in scope with party + total holdings, for the hemicycle.
+def hemicycle(conn: sqlite3.Connection, scope: Scope = "an") -> list[dict]:
+    """All members in scope with party + total holdings, for the hemicycle.
 
     Sorted by political spectrum (left → right) for representative seating.
-    Only includes declarants with at least one declaration filed by *asof*.
+    For AN/Sénat/Parl, shows the full roster from the authoritative source
+    (party_source), not just those with HATVP filings.
     """
-    cutoff = _next_month(asof)
+    roster = _ROSTER_FILTERS.get(scope)
+    if roster:
+        where = roster
+        params = ()
+    else:
+        where = f"EXISTS (SELECT 1 FROM declaration dd WHERE dd.declarant_id = de.id AND {scope_clause(scope)})"
+        params = ()
+
     rows = conn.execute(
         f"""
         SELECT de.id, de.nom, de.prenom,
                COALESCE(p.slug, 'none')    AS party_slug,
-               COALESCE(p.label, 'Non affilié') AS party_label,
+               COALESCE(p.label, 'Non inscrit') AS party_label,
                COALESCE(p.color, '#999999') AS party_color,
                COALESCE(SUM(h.evaluation_eur), 0) AS total
         FROM declarant de
         LEFT JOIN party p ON de.party_id = p.id
         LEFT JOIN declaration d ON d.declarant_id = de.id
-             AND {scope_clause(scope)} AND d.date_depot < ?
         LEFT JOIN holding h ON h.declaration_id = d.id
              AND h.kind = 'participation_financiere'
-        WHERE EXISTS (
-            SELECT 1 FROM declaration dd
-            WHERE dd.declarant_id = de.id AND {scope_clause(scope)}
-              AND dd.date_depot < ?
-        )
+        WHERE {where}
         GROUP BY de.id
         ORDER BY {_SPECTRUM_ORDER}, de.nom
         """,
-        (cutoff, cutoff),
+        params,
     ).fetchall()
     return [dict(r) for r in rows]
 

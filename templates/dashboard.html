@@ -90,32 +90,28 @@
     const scope = '{{ scope }}';
     let chartTop = null, chartStack = null;
 
-    // --- Load timeline + initial data in parallel ---
-    const [timelineData, initSeats, initGroups, initDash] = await Promise.all([
+    // --- Load timeline + all data in parallel ---
+    // Hemicycle shows fixed composition (no asof) — seats don't change between
+    // elections. Only the dashboard charts/tables respond to the timeline.
+    const [timelineData, seats, groups, initDash] = await Promise.all([
         pv.fetchJSON('/api/timeline?scope=' + scope),
         pv.fetchJSON('/api/hemicycle?scope=' + scope),
         pv.fetchJSON('/api/hemicycle/groups?scope=' + scope),
         pv.fetchJSON('/api/dashboard?scope=' + scope),
     ]);
 
-    // Render timeline; on change, refetch everything for the selected month
+    // Render timeline; on change, refetch only dashboard data
     pv.timeline.render(
         document.getElementById('timeline'),
         timelineData,
         async (month) => {
-            const asof = '&asof=' + month;
-            const [seats, groups, data] = await Promise.all([
-                pv.fetchJSON('/api/hemicycle?scope=' + scope + asof),
-                pv.fetchJSON('/api/hemicycle/groups?scope=' + scope + asof),
-                pv.fetchJSON('/api/dashboard?scope=' + scope + asof),
-            ]);
-            renderHemicycle(seats, groups);
+            const data = await pv.fetchJSON('/api/dashboard?scope=' + scope + '&asof=' + month);
             renderDashboard(data);
         },
     );
 
     // --- Initial render ---
-    renderHemicycle(initSeats, initGroups);
+    renderHemicycle(seats, groups);
     renderDashboard(initDash);
 
     function renderHemicycle(seats, groups) {

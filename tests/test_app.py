@@ -31,7 +31,7 @@ def client(tmp_path, monkeypatch):
     )
     (party_id,) = conn.execute("SELECT id FROM party WHERE slug = 'rn'").fetchone()
     conn.execute(
-        "UPDATE declarant SET party_id = ?, party_source = 'test' WHERE nom = 'DUPONT'",
+        "UPDATE declarant SET party_id = ?, party_source = 'an_opendata' WHERE nom = 'DUPONT'",
         (party_id,),
     )
     sync.cmd_changes(conn)
@@ -121,13 +121,9 @@ def test_hemicycle_all_scope(client):
     assert len(r.json()) >= 1
 
 
-def test_hemicycle_with_asof(client):
-    # Very early asof — should return empty (no declarations before 2000)
-    r = client.get("/api/hemicycle?scope=all&asof=2000-01")
-    assert r.status_code == 200
-    assert r.json() == []
-    # Far future asof — should return all seats
-    r = client.get("/api/hemicycle?scope=all&asof=2099-12")
+def test_hemicycle_fixed_roster(client):
+    """Hemicycle shows all members regardless of declaration dates."""
+    r = client.get("/api/hemicycle?scope=all")
     assert r.status_code == 200
     assert len(r.json()) >= 1
 

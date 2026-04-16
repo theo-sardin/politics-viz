@@ -196,12 +196,10 @@ def api_search(
 def api_hemicycle(
     scope: str = Query("an"),
     party: str = Query(None),
-    asof: str | None = Query(None),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> JSONResponse:
     scope = _validate_scope(scope)
-    asof = _validate_asof(asof)
-    seats = queries.hemicycle(conn, scope=scope, asof=asof)
+    seats = queries.hemicycle(conn, scope=scope)
     if party:
         seats = [s for s in seats if s["party_slug"] == party]
     return JSONResponse(seats)
@@ -209,13 +207,10 @@ def api_hemicycle(
 
 @app.get("/api/hemicycle/groups")
 def api_hemicycle_groups(
-    scope: str = Query("an"),
-    asof: str | None = Query(None),
-    conn: sqlite3.Connection = Depends(get_conn),
+    scope: str = Query("an"), conn: sqlite3.Connection = Depends(get_conn)
 ) -> JSONResponse:
     scope = _validate_scope(scope)
-    asof = _validate_asof(asof)
-    return JSONResponse(queries.hemicycle_groups(conn, scope=scope, asof=asof))
+    return JSONResponse(queries.hemicycle_groups(conn, scope=scope))
 
 
 @app.get("/api/timeline")
