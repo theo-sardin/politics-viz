@@ -7,19 +7,13 @@
     <span class="party-pill" style="background: {{ party.color }}">{{ party.label }}</span>
 </h1>
 
-<div class="window-selector">
-    <a href="/party/{{ party.slug }}?window=12m" class="{% if window == '12m' %}active{% endif %}">12 mois</a>
-    <a href="/party/{{ party.slug }}?window=24m" class="{% if window == '24m' %}active{% endif %}">24 mois</a>
-    <a href="/party/{{ party.slug }}?window=all" class="{% if window == 'all' %}active{% endif %}">Tout</a>
-</div>
-
 <div class="grid">
     <section class="card">
         <h2>Top 20 sociétés détenues par les membres</h2>
         <div class="chart-box"><canvas id="chart-top"></canvas></div>
     </section>
     <section class="card">
-        <h2>Nouvelles positions et progressions (période)</h2>
+        <h2>Nouvelles positions et progressions</h2>
         <table id="table-surges">
             <thead><tr><th>Société</th><th>Type</th><th class="num">Δ €</th></tr></thead>
             <tbody></tbody>
@@ -40,7 +34,7 @@
 <script>
 (async function () {
     const esc = pv.escapeHtml;
-    const data = await pv.fetchJSON('/api/party/{{ party.slug }}?window={{ window }}');
+    const data = await pv.fetchJSON('/api/party/{{ party.slug }}');
 
     const top = data.top_companies;
     pv.barChart(document.getElementById('chart-top'), {

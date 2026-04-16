@@ -22,7 +22,7 @@ DB_PATH = os.environ.get("POLITICS_DB", str(BASE_DIR / "data.sqlite"))
 ASSET_VERSION = str(
     max(
         (BASE_DIR / "static" / name).stat().st_mtime_ns
-        for name in ("style.css", "app.js")
+        for name in ("style.css", "app.js", "hemicycle.js", "timeline.js")
     )
 )
 
@@ -40,14 +40,17 @@ def get_conn() -> sqlite3.Connection:
         conn.close()
 
 
-WINDOWS = {"12m", "24m", "all"}
 SCOPES = {"an", "senat", "parl", "all"}
 
 
-def _validate_window(window: str) -> str:
-    if window not in WINDOWS:
-        raise HTTPException(status_code=400, detail=f"window must be one of {sorted(WINDOWS)}")
-    return window
+def _validate_asof(asof: str | None) -> str | None:
+    """Validate 'YYYY-MM' format or None."""
+    if asof is None:
+        return None
+    import re
+    if not re.match(r"^\d{4}-\d{2}$", asof):
+        raise HTTPException(status_code=400, detail="asof must be YYYY-MM format")
+    return asof
 
 
 def _validate_scope(scope: str) -> str:
@@ -62,17 +65,15 @@ def _validate_scope(scope: str) -> str:
 @app.get("/", response_class=HTMLResponse)
 def index(
     request: Request,
-    window: str = Query("all"),
     scope: str = Query("an"),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
-    window = _validate_window(window)
     scope = _validate_scope(scope)
     stats = _scope_stats(conn, scope)
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        {"stats": stats, "window": window, "scope": scope},
+        {"stats": stats, "scope": scope},
     )
 
 
@@ -127,17 +128,15 @@ def company_page(
 def party_page(
     request: Request,
     slug: str,
-    window: str = Query("12m"),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
-    window = _validate_window(window)
     party = queries.get_party(conn, slug)
     if not party:
         raise HTTPException(status_code=404, detail="party not found")
     return templates.TemplateResponse(
         request,
         "party.html",
-        {"party": party, "window": window},
+        {"party": party},
     )
 
 
@@ -164,20 +163,19 @@ def api_company(
 @app.get("/api/party/{slug}")
 def api_party(
     slug: str,
-    window: str = Query("12m"),
+    asof: str | None = Query(None),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> JSONResponse:
-    window = _validate_window(window)
+    asof = _validate_asof(asof)
     party = queries.get_party(conn, slug)
     if not party:
         raise HTTPException(status_code=404, detail="party not found")
     return JSONResponse(
         {
             "party": party,
-            "window": window,
-            "top_companies": queries.party_top_companies(conn, slug, window),
+            "top_companies": queries.party_top_companies(conn, slug, asof=asof),
             "members": queries.party_members(conn, slug),
-            "surges": queries.party_surges(conn, slug, window),
+            "surges": queries.party_surges(conn, slug, asof=asof),
         }
     )
 
@@ -198,10 +196,12 @@ def api_search(
 def api_hemicycle(
     scope: str = Query("an"),
     party: str = Query(None),
+    asof: str | None = Query(None),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> JSONResponse:
     scope = _validate_scope(scope)
-    seats = queries.hemicycle(conn, scope=scope)
+    asof = _validate_asof(asof)
+    seats = queries.hemicycle(conn, scope=scope, asof=asof)
     if party:
         seats = [s for s in seats if s["party_slug"] == party]
     return JSONResponse(seats)
@@ -209,28 +209,39 @@ def api_hemicycle(
 
 @app.get("/api/hemicycle/groups")
 def api_hemicycle_groups(
-    scope: str = Query("an"), conn: sqlite3.Connection = Depends(get_conn)
+    scope: str = Query("an"),
+    asof: str | None = Query(None),
+    conn: sqlite3.Connection = Depends(get_conn),
 ) -> JSONResponse:
     scope = _validate_scope(scope)
-    return JSONResponse(queries.hemicycle_groups(conn, scope=scope))
+    asof = _validate_asof(asof)
+    return JSONResponse(queries.hemicycle_groups(conn, scope=scope, asof=asof))
+
+
+@app.get("/api/timeline")
+def api_timeline(
+    scope: str = Query("an"),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> JSONResponse:
+    scope = _validate_scope(scope)
+    return JSONResponse(queries.timeline(conn, scope=scope))
 
 
 @app.get("/api/dashboard")
 def api_dashboard(
-    window: str = Query("all"),
     scope: str = Query("an"),
+    asof: str | None = Query(None),
     conn: sqlite3.Connection = Depends(get_conn),
 ) -> JSONResponse:
-    window = _validate_window(window)
     scope = _validate_scope(scope)
+    asof = _validate_asof(asof)
     return JSONResponse(
         {
-            "window": window,
             "scope": scope,
-            "top_companies": queries.top_companies(conn, window, scope=scope),
-            "top_by_party": queries.top_companies_by_party(conn, window, scope=scope),
-            "surges_new": queries.surges(conn, window, "new", scope=scope),
-            "surges_grown": queries.surges(conn, window, "grown", scope=scope),
+            "top_companies": queries.top_companies(conn, scope=scope, asof=asof),
+            "top_by_party": queries.top_companies_by_party(conn, scope=scope, asof=asof),
+            "surges_new": queries.surges(conn, "new", scope=scope, asof=asof),
+            "surges_grown": queries.surges(conn, "grown", scope=scope, asof=asof),
             "top_conflicted": queries.top_conflicted(conn, scope=scope),
         }
     )

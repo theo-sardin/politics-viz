@@ -7,17 +7,11 @@ All money figures are in integer euros.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timedelta
 from typing import Literal
 
 from parsers.normalize import display_name, strip_accents
 
-Window = Literal["12m", "24m", "all"]
 Scope = Literal["an", "senat", "parl", "all"]
-
-# Sentinel used when the caller wants no lower bound. Anything greater-than
-# this is always true in lexical ISO-date comparison.
-_MIN_DATE = "0000-01-01T00:00:00"
 
 # SQL-injectable-looking but safe: these strings are baked into queries,
 # not user-supplied — ``scope_clause`` raises on anything unknown.
@@ -44,33 +38,68 @@ def scope_clause(scope: Scope) -> str:
     return clause
 
 
-def window_start(conn: sqlite3.Connection, window: Window) -> str:
-    """ISO datetime floor for *window*, anchored on MAX(date_depot)."""
-    if window == "all":
-        return _MIN_DATE
-    row = conn.execute("SELECT MAX(date_depot) AS d FROM declaration").fetchone()
-    if not row or not row["d"]:
-        return _MIN_DATE
-    max_dt = datetime.fromisoformat(row["d"])
-    months = {"12m": 12, "24m": 24}[window]
-    return (max_dt - timedelta(days=months * 30)).isoformat()
+def _next_month(asof: str | None) -> str:
+    """Convert 'YYYY-MM' to the first of the following month.
+
+    Used in SQL as ``date_depot < _next_month(asof)`` to include everything
+    up to and including the selected month.  Returns a far-future date when
+    *asof* is None (no upper bound = latest data).
+    """
+    if asof is None:
+        return "9999-12-31"
+    year, month = int(asof[:4]), int(asof[5:7])
+    if month == 12:
+        return f"{year + 1:04d}-01"
+    return f"{year:04d}-{month + 1:02d}"
+
+
+def _trailing_start(asof: str | None, months: int = 3) -> str:
+    """Start month for a trailing window of *months* ending at *asof*.
+
+    Used for surges: show changes in the N months leading up to asof.
+    Returns '0000-01' when asof is None (no lower bound).
+    """
+    if asof is None:
+        return "0000-01"
+    year, mo = int(asof[:4]), int(asof[5:7])
+    mo -= months - 1  # inclusive of asof month
+    while mo <= 0:
+        year -= 1
+        mo += 12
+    return f"{year:04d}-{mo:02d}"
+
+
+def timeline(conn: sqlite3.Connection, scope: Scope = "an") -> list[dict]:
+    """Months with at least one declaration in scope, for the timeline slider.
+
+    Returns [{month: 'YYYY-MM', n: int}] sorted chronologically.
+    """
+    rows = conn.execute(
+        f"""
+        SELECT SUBSTR(date_depot, 1, 7) AS month,
+               COUNT(*)                 AS n
+        FROM declaration d
+        WHERE date_depot IS NOT NULL AND {scope_clause(scope)}
+        GROUP BY month
+        ORDER BY month
+        """,
+    ).fetchall()
+    return [dict(r) for r in rows]
 
 
 def top_companies(
     conn: sqlite3.Connection,
-    window: Window,
     scope: Scope = "an",
+    asof: str | None = None,
     limit: int = 10,
     min_holders: int = 2,
 ) -> list[dict]:
-    """Top companies by SUM(evaluation_eur) within a scope, filtered to
-    those held by at least *min_holders* distinct declarants.
+    """Top companies by SUM(evaluation_eur) within a scope as of a month.
 
     The min-holders filter hides single-individual outliers (one wealthy
     declarant's personal SCI valued at tens of millions) so the dashboard
     surfaces companies with collective holding patterns.
     """
-    start = window_start(conn, window)
     rows = conn.execute(
         f"""
         SELECT h.company_slug          AS slug,
@@ -82,20 +111,20 @@ def top_companies(
         WHERE h.kind = 'participation_financiere'
           AND h.evaluation_eur IS NOT NULL
           AND h.company_slug <> ''
-          AND d.date_depot >= ?
+          AND d.date_depot < ?
           AND {scope_clause(scope)}
         GROUP BY h.company_slug
         HAVING n_people >= ?
         ORDER BY total DESC
         LIMIT ?
         """,
-        (start, min_holders, limit),
+        (_next_month(asof), min_holders, limit),
     ).fetchall()
     return _prettify([dict(r) for r in rows])
 
 
 def top_companies_by_party(
-    conn: sqlite3.Connection, window: Window, scope: Scope = "an", limit: int = 10
+    conn: sqlite3.Connection, scope: Scope = "an", asof: str | None = None, limit: int = 10
 ) -> dict:
     """Top-N companies with per-party euro breakdowns.
 
@@ -106,13 +135,13 @@ def top_companies_by_party(
         'matrix':    [[eur_for_party_j_on_company_i, ...], ...]
       }
     """
-    companies = top_companies(conn, window, scope=scope, limit=limit)
+    companies = top_companies(conn, scope=scope, asof=asof, limit=limit)
     if not companies:
         return {"companies": [], "parties": [], "matrix": []}
 
     slugs = [c["slug"] for c in companies]
     placeholders = ",".join(["?"] * len(slugs))
-    start = window_start(conn, window)
+    cutoff = _next_month(asof)
 
     breakdown = conn.execute(
         f"""
@@ -128,11 +157,11 @@ def top_companies_by_party(
         WHERE h.kind = 'participation_financiere'
           AND h.evaluation_eur IS NOT NULL
           AND h.company_slug IN ({placeholders})
-          AND d.date_depot >= ?
+          AND d.date_depot < ?
           AND {scope_clause(scope)}
         GROUP BY h.company_slug, party_slug
         """,
-        [*slugs, start],
+        [*slugs, cutoff],
     ).fetchall()
 
     # Collect unique parties preserving first-seen order for stable stacking.
@@ -309,10 +338,9 @@ def get_party(conn: sqlite3.Connection, slug: str) -> dict | None:
 
 
 def party_top_companies(
-    conn: sqlite3.Connection, slug: str, window: Window, limit: int = 20
+    conn: sqlite3.Connection, slug: str, asof: str | None = None, limit: int = 20
 ) -> list[dict]:
-    """Top companies declared by members of *slug*."""
-    start = window_start(conn, window)
+    """Top companies declared by members of *slug* as of a month."""
     rows = conn.execute(
         """
         SELECT h.company_slug              AS slug,
@@ -327,12 +355,12 @@ def party_top_companies(
           AND h.evaluation_eur IS NOT NULL
           AND h.company_slug <> ''
           AND p.slug = ?
-          AND d.date_depot >= ?
+          AND d.date_depot < ?
         GROUP BY h.company_slug
         ORDER BY total DESC
         LIMIT ?
         """,
-        (slug, start, limit),
+        (slug, _next_month(asof), limit),
     ).fetchall()
     return _prettify([dict(r) for r in rows])
 
@@ -359,9 +387,11 @@ def party_members(conn: sqlite3.Connection, slug: str) -> list[dict]:
 
 
 def party_surges(
-    conn: sqlite3.Connection, slug: str, window: Window, limit: int = 20
+    conn: sqlite3.Connection, slug: str, asof: str | None = None, limit: int = 20
 ) -> list[dict]:
-    start = window_start(conn, window)
+    """Recent surges for members of a party, within 3 months of asof."""
+    start = _trailing_start(asof)
+    cutoff = _next_month(asof)
     rows = conn.execute(
         """
         SELECT hc.company_slug AS slug,
@@ -374,29 +404,31 @@ def party_surges(
         JOIN party      p  ON de.party_id = p.id
         JOIN declaration d ON hc.curr_decl_id = d.id
         WHERE p.slug = ?
-          AND d.date_depot >= ?
+          AND SUBSTR(d.date_depot, 1, 7) >= ?
+          AND d.date_depot < ?
           AND hc.change_type IN ('new', 'grown')
         ORDER BY hc.delta_eur DESC
         LIMIT ?
         """,
-        (slug, start, limit),
+        (slug, start, cutoff, limit),
     ).fetchall()
     return _prettify([dict(r) for r in rows])
 
 
 def surges(
     conn: sqlite3.Connection,
-    window: Window,
     change_type: str,
     scope: Scope = "an",
+    asof: str | None = None,
     limit: int = 10,
 ) -> list[dict]:
     """Top companies by aggregate delta_eur for a given change_type.
 
-    For 'new' and 'grown' we sort by SUM(delta_eur) DESC. For 'reduced'
-    and 'sold' the deltas are negative, so we sort by magnitude.
+    Uses a 3-month trailing window ending at *asof* so the table shows
+    recent changes rather than all-time accumulations.
     """
-    start = window_start(conn, window)
+    start = _trailing_start(asof)
+    cutoff = _next_month(asof)
     order = "ABS(total) DESC" if change_type in ("reduced", "sold") else "total DESC"
     rows = conn.execute(
         f"""
@@ -409,13 +441,14 @@ def surges(
         FROM holding_change hc
         JOIN declaration d ON hc.curr_decl_id = d.id
         WHERE hc.change_type = ?
-          AND d.date_depot >= ?
+          AND SUBSTR(d.date_depot, 1, 7) >= ?
+          AND d.date_depot < ?
           AND {scope_clause(scope)}
         GROUP BY hc.company_slug
         ORDER BY {order}
         LIMIT ?
         """,
-        (change_type, start, limit),
+        (change_type, start, cutoff, limit),
     ).fetchall()
     return _prettify([dict(r) for r in rows])
 
@@ -471,11 +504,24 @@ def declarant_conflicts(conn: sqlite3.Connection, declarant_id: int) -> list[dic
     return [dict(r) for r in rows]
 
 
-def hemicycle_groups(conn: sqlite3.Connection, scope: Scope = "an", only_holders: bool = True) -> list[dict]:
-    """Party-level aggregates for the grouped hemicycle view.
+_SPECTRUM_ORDER = """
+    CASE COALESCE(p.slug, 'none')
+        WHEN 'lfi' THEN 1  WHEN 'pcf' THEN 2  WHEN 'eelv' THEN 3
+        WHEN 'ps' THEN 4   WHEN 'liot' THEN 5  WHEN 'renaissance' THEN 6
+        WHEN 'modem' THEN 7 WHEN 'horizons' THEN 8 WHEN 'udi' THEN 9
+        WHEN 'lr' THEN 10  WHEN 'rn' THEN 11  WHEN 'rec' THEN 12
+        ELSE 6
+    END
+"""
+
+
+def hemicycle_groups(conn: sqlite3.Connection, scope: Scope = "an", asof: str | None = None) -> list[dict]:
+    """Party-level aggregates for the hemicycle.
 
     Returns [{slug, label, color, n_seats, total_eur}] sorted left→right.
+    Only includes declarants with at least one declaration filed by *asof*.
     """
+    cutoff = _next_month(asof)
     rows = conn.execute(
         f"""
         SELECT COALESCE(p.slug, 'none')    AS slug,
@@ -485,32 +531,30 @@ def hemicycle_groups(conn: sqlite3.Connection, scope: Scope = "an", only_holders
                COALESCE(SUM(h.evaluation_eur), 0) AS total_eur
         FROM declarant de
         LEFT JOIN party p ON de.party_id = p.id
-        LEFT JOIN declaration d ON d.declarant_id = de.id AND {scope_clause(scope)}
+        LEFT JOIN declaration d ON d.declarant_id = de.id
+             AND {scope_clause(scope)} AND d.date_depot < ?
         LEFT JOIN holding h ON h.declaration_id = d.id
              AND h.kind = 'participation_financiere'
         WHERE EXISTS (
             SELECT 1 FROM declaration dd
             WHERE dd.declarant_id = de.id AND {scope_clause(scope)}
+              AND dd.date_depot < ?
         )
         GROUP BY COALESCE(p.slug, 'none')
-        ORDER BY
-            CASE COALESCE(p.slug, 'none')
-                WHEN 'lfi' THEN 1  WHEN 'pcf' THEN 2  WHEN 'eelv' THEN 3
-                WHEN 'ps' THEN 4   WHEN 'liot' THEN 5  WHEN 'renaissance' THEN 6
-                WHEN 'modem' THEN 7 WHEN 'horizons' THEN 8 WHEN 'udi' THEN 9
-                WHEN 'lr' THEN 10  WHEN 'rn' THEN 11  WHEN 'rec' THEN 12
-                ELSE 6
-            END
+        ORDER BY {_SPECTRUM_ORDER}
         """,
+        (cutoff, cutoff),
     ).fetchall()
     return [dict(r) for r in rows]
 
 
-def hemicycle(conn: sqlite3.Connection, scope: Scope = "an") -> list[dict]:
+def hemicycle(conn: sqlite3.Connection, scope: Scope = "an", asof: str | None = None) -> list[dict]:
     """All declarants in scope with party + total holdings, for the hemicycle.
 
-    Sorted by political spectrum (left → right) for realistic seating.
+    Sorted by political spectrum (left → right) for representative seating.
+    Only includes declarants with at least one declaration filed by *asof*.
     """
+    cutoff = _next_month(asof)
     rows = conn.execute(
         f"""
         SELECT de.id, de.nom, de.prenom,
@@ -520,32 +564,19 @@ def hemicycle(conn: sqlite3.Connection, scope: Scope = "an") -> list[dict]:
                COALESCE(SUM(h.evaluation_eur), 0) AS total
         FROM declarant de
         LEFT JOIN party p ON de.party_id = p.id
-        LEFT JOIN declaration d ON d.declarant_id = de.id AND {scope_clause(scope)}
+        LEFT JOIN declaration d ON d.declarant_id = de.id
+             AND {scope_clause(scope)} AND d.date_depot < ?
         LEFT JOIN holding h ON h.declaration_id = d.id
              AND h.kind = 'participation_financiere'
         WHERE EXISTS (
             SELECT 1 FROM declaration dd
             WHERE dd.declarant_id = de.id AND {scope_clause(scope)}
+              AND dd.date_depot < ?
         )
         GROUP BY de.id
-        ORDER BY
-            CASE COALESCE(p.slug, 'none')
-                WHEN 'lfi' THEN 1
-                WHEN 'pcf' THEN 2
-                WHEN 'eelv' THEN 3
-                WHEN 'ps' THEN 4
-                WHEN 'liot' THEN 5
-                WHEN 'renaissance' THEN 6
-                WHEN 'modem' THEN 7
-                WHEN 'horizons' THEN 8
-                WHEN 'udi' THEN 9
-                WHEN 'lr' THEN 10
-                WHEN 'rn' THEN 11
-                WHEN 'rec' THEN 12
-                ELSE 6
-            END,
-            de.nom
+        ORDER BY {_SPECTRUM_ORDER}, de.nom
         """,
+        (cutoff, cutoff),
     ).fetchall()
     return [dict(r) for r in rows]
 

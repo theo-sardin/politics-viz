@@ -57,21 +57,26 @@ def test_dashboard_page_and_api(client):
     r = client.get("/")
     assert r.status_code == 200
     assert "Top 10" in r.text or "top 10" in r.text.lower()
-    r = client.get("/api/dashboard?window=all")
+    r = client.get("/api/dashboard")
     assert r.status_code == 200
     j = r.json()
-    # Fixture has a single declarant, so top_companies (min_holders=2)
-    # is expected empty — just assert the keys exist and are lists.
     for key in ("top_companies", "top_by_party", "surges_new", "surges_grown"):
         assert isinstance(j[key], (list, dict))
     assert len(j["surges_new"]) >= 1
+
+
+def test_dashboard_api_with_asof(client):
+    r = client.get("/api/dashboard?asof=2030-12")
+    assert r.status_code == 200
+    j = r.json()
+    assert isinstance(j["top_companies"], list)
 
 
 def test_party_page_and_api(client):
     r = client.get("/party/rn")
     assert r.status_code == 200
     assert "Rassemblement National" in r.text
-    r = client.get("/api/party/rn?window=all")
+    r = client.get("/api/party/rn")
     assert r.status_code == 200
     assert r.json()["party"]["slug"] == "rn"
 
@@ -116,6 +121,17 @@ def test_hemicycle_all_scope(client):
     assert len(r.json()) >= 1
 
 
+def test_hemicycle_with_asof(client):
+    # Very early asof — should return empty (no declarations before 2000)
+    r = client.get("/api/hemicycle?scope=all&asof=2000-01")
+    assert r.status_code == 200
+    assert r.json() == []
+    # Far future asof — should return all seats
+    r = client.get("/api/hemicycle?scope=all&asof=2099-12")
+    assert r.status_code == 200
+    assert len(r.json()) >= 1
+
+
 def test_dashboard_has_hemicycle(client):
     r = client.get("/")
     assert r.status_code == 200
@@ -124,12 +140,11 @@ def test_dashboard_has_hemicycle(client):
 
 def test_dashboard_has_conflict_card(client):
     r = client.get("/")
-    # Check for either English or French version of the conflict card title
     assert "conflict" in r.text.lower() or "conflit" in r.text.lower()
 
 
 def test_dashboard_api_has_top_conflicted(client):
-    r = client.get("/api/dashboard?window=all&scope=an")
+    r = client.get("/api/dashboard?scope=an")
     assert r.status_code == 200
     j = r.json()
     assert "top_conflicted" in j
@@ -138,7 +153,7 @@ def test_dashboard_api_has_top_conflicted(client):
 
 def test_scope_selector_values(client):
     for scope in ("an", "senat", "parl", "all"):
-        r = client.get(f"/?scope={scope}&window=all")
+        r = client.get(f"/?scope={scope}")
         assert r.status_code == 200
     assert client.get("/?scope=bogus").status_code == 400
 
@@ -158,5 +173,16 @@ def test_search_too_short(client):
     assert r.json() == []
 
 
-def test_bad_window_is_400(client):
-    assert client.get("/api/dashboard?window=bogus").status_code == 400
+def test_bad_asof_is_400(client):
+    assert client.get("/api/dashboard?asof=bogus").status_code == 400
+    assert client.get("/api/dashboard?asof=2024").status_code == 400
+
+
+def test_timeline_api(client):
+    r = client.get("/api/timeline?scope=all")
+    assert r.status_code == 200
+    months = r.json()
+    assert isinstance(months, list)
+    assert len(months) >= 1
+    assert "month" in months[0]
+    assert "n" in months[0]
