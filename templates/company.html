@@ -1,26 +1,26 @@
 {% extends "base.html" %}
 {% block title %}{{ company.name }} — politics-viz{% endblock %}
 {% block main %}
-<p><a href="/">← Dashboard</a></p>
+<p><a href="/">← Tableau de bord</a></p>
 <h1>{{ company.name }}</h1>
 <p class="lede">
-    Total declared: <strong id="company-total">…</strong> ·
-    <span id="company-people">…</span> declarants
+    Total déclaré : <strong id="company-total">…</strong> ·
+    <span id="company-people">…</span> déclarants
 </p>
 
 <div class="grid">
     <section class="card">
-        <h2>Declared € by party</h2>
+        <h2>€ déclarés par parti</h2>
         <div class="chart-box"><canvas id="chart-party"></canvas></div>
     </section>
     <section class="card">
-        <h2>Quarterly timeline</h2>
+        <h2>Évolution trimestrielle</h2>
         <div class="chart-box"><canvas id="chart-timeline"></canvas></div>
     </section>
     <section class="card" style="grid-column: 1 / -1">
-        <h2>Holders</h2>
+        <h2>Détenteurs</h2>
         <table id="table-holders">
-            <thead><tr><th>Name</th><th>Party</th><th class="num">Declared €</th></tr></thead>
+            <thead><tr><th>Nom</th><th>Parti</th><th class="num">€ déclarés</th></tr></thead>
             <tbody></tbody>
         </table>
     </section>

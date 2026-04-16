@@ -10,14 +10,18 @@
 <header>
     <a class="brand" href="/">politics-viz</a>
     <nav>
-        <a href="/">Dashboard</a>
+        <a href="/">Tableau de bord</a>
     </nav>
+    <div class="search-wrap">
+        <input type="search" id="search-input" placeholder="Rechercher un député…" autocomplete="off">
+        <div id="search-results" class="search-results"></div>
+    </div>
 </header>
 <main>
 {% block main %}{% endblock %}
 </main>
 <footer>
-    <p>Source: HATVP + NosDéputés + data.senat.fr + Parlement européen.</p>
+    <p>Source : HATVP · NosDéputés · data.senat.fr · Parlement européen.</p>
 </footer>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.6/dist/chart.umd.min.js"></script>
 <script src="https://d3js.org/d3.v7.min.js"></script>

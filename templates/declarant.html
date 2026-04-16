@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ decl.prenom }} {{ decl.nom }} — politics-viz{% endblock %}
 {% block main %}
-<p><a href="/">← Dashboard</a></p>
+<p><a href="/">← Tableau de bord</a></p>
 <h1>{{ decl.prenom }} {{ decl.nom }}</h1>
 <p class="lede">
     {% if decl.party_slug %}
@@ -10,15 +10,15 @@
         <span class="party-pill" style="background: #999">Non affilié / Local</span>
     {% endif %}
     {% if decl.date_naissance %} · né(e) {{ decl.date_naissance }}{% endif %}
-    {% if vote_count %} · {{ vote_count }} votes cast{% endif %}
+    {% if vote_count %} · {{ vote_count }} votes exprimés{% endif %}
 </p>
 
 {% if conflicts %}
 <section class="card conflict-card" style="margin-bottom: 1rem">
-    <h2>⚠ Potential conflicts ({{ conflicts | length }} flags)</h2>
-    <p class="disclaimer">Mechanical co-occurrences between holdings/spouse employment and sector-related votes. Not accusations.</p>
+    <h2>⚠ Conflits potentiels ({{ conflicts | length }} signalements)</h2>
+    <p class="disclaimer">Co-occurrences mécaniques entre participations/emploi du conjoint et votes liés à un secteur. Pas des accusations.</p>
     <table>
-        <thead><tr><th>Date</th><th>Sector</th><th>Source</th><th>Reason</th></tr></thead>
+        <thead><tr><th>Date</th><th>Secteur</th><th>Source</th><th>Motif</th></tr></thead>
         <tbody>
         {% for c in conflicts[:20] %}
             <tr class="flag-row">
@@ -29,7 +29,7 @@
             </tr>
         {% endfor %}
         {% if conflicts | length > 20 %}
-            <tr><td colspan="4" class="empty">… and {{ conflicts | length - 20 }} more flags.</td></tr>
+            <tr><td colspan="4" class="empty">… et {{ conflicts | length - 20 }} signalements supplémentaires.</td></tr>
         {% endif %}
         </tbody>
     </table>
@@ -38,9 +38,9 @@
 
 {% if changes %}
 <section class="card" style="margin-bottom: 1rem">
-    <h2>Change log ({{ changes | length }})</h2>
+    <h2>Historique des changements ({{ changes | length }})</h2>
     <table>
-        <thead><tr><th>Date</th><th>Company</th><th>Type</th><th class="num">Δ €</th></tr></thead>
+        <thead><tr><th>Date</th><th>Société</th><th>Type</th><th class="num">Δ €</th></tr></thead>
         <tbody>
         {% for c in changes %}
             <tr>
@@ -55,14 +55,14 @@
 </section>
 {% endif %}
 
-<h2>Declarations ({{ declarations | length }})</h2>
+<h2>Déclarations ({{ declarations | length }})</h2>
 {% for d in declarations %}
 <section class="card" style="margin-bottom: 1rem">
     <h2>{{ d.date_depot[:10] }} — {{ d.mandate_cat or '—' }} / {{ d.organe_label or '—' }}</h2>
     {% if d.holdings %}
     <table>
         <thead>
-            <tr><th>Kind</th><th>Company</th><th class="num">€</th><th class="num">% capital</th><th class="num">Parts</th><th>Note</th></tr>
+            <tr><th>Type</th><th>Société</th><th class="num">€</th><th class="num">% capital</th><th class="num">Parts</th><th>Note</th></tr>
         </thead>
         <tbody>
         {% for h in d.holdings %}
@@ -78,7 +78,7 @@
         </tbody>
     </table>
     {% else %}
-    <p class="lede">No holdings declared.</p>
+    <p class="lede">Aucune participation déclarée.</p>
     {% endif %}
 </section>
 {% endfor %}

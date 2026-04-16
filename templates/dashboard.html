@@ -1,75 +1,75 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — politics-viz{% endblock %}
-{% set scope_labels = {'an': 'Assemblée nationale', 'senat': 'Sénat', 'parl': 'Assemblée + Sénat', 'all': 'All declarants (incl. local)'} %}
+{% block title %}Tableau de bord — politics-viz{% endblock %}
+{% set scope_labels = {'an': 'Assemblée nationale', 'senat': 'Sénat', 'parl': 'Assemblée + Sénat', 'all': 'Tous les déclarants (incl. local)'} %}
 {% block main %}
-<h1>Declared holdings — {{ scope_labels[scope] }}</h1>
+<h1>Participations déclarées — {{ scope_labels[scope] }}</h1>
 <p class="lede">
-    {{ '{:,}'.format(stats.declarants) }} declarants ·
-    {{ '{:,}'.format(stats.declarations) }} declarations ·
-    {{ '{:,}'.format(stats.holdings) }} holdings ·
-    source: HATVP.
+    {{ '{:,}'.format(stats.declarants) }} déclarants ·
+    {{ '{:,}'.format(stats.declarations) }} déclarations ·
+    {{ '{:,}'.format(stats.holdings) }} participations ·
+    source : HATVP.
 </p>
 
 <div class="selectors">
     <div class="window-selector">
-        <a href="?window=12m&scope={{ scope }}" class="{% if window == '12m' %}active{% endif %}">12 months</a>
-        <a href="?window=24m&scope={{ scope }}" class="{% if window == '24m' %}active{% endif %}">24 months</a>
-        <a href="?window=all&scope={{ scope }}" class="{% if window == 'all' %}active{% endif %}">All time</a>
+        <a href="?window=12m&scope={{ scope }}" class="{% if window == '12m' %}active{% endif %}">12 mois</a>
+        <a href="?window=24m&scope={{ scope }}" class="{% if window == '24m' %}active{% endif %}">24 mois</a>
+        <a href="?window=all&scope={{ scope }}" class="{% if window == 'all' %}active{% endif %}">Tout</a>
     </div>
     <div class="window-selector">
         <a href="?window={{ window }}&scope=an" class="{% if scope == 'an' %}active{% endif %}">Députés</a>
         <a href="?window={{ window }}&scope=senat" class="{% if scope == 'senat' %}active{% endif %}">Sénateurs</a>
-        <a href="?window={{ window }}&scope=parl" class="{% if scope == 'parl' %}active{% endif %}">Both</a>
-        <a href="?window={{ window }}&scope=all" class="{% if scope == 'all' %}active{% endif %}">All</a>
+        <a href="?window={{ window }}&scope=parl" class="{% if scope == 'parl' %}active{% endif %}">Les deux</a>
+        <a href="?window={{ window }}&scope=all" class="{% if scope == 'all' %}active{% endif %}">Tous</a>
     </div>
 </div>
 
 <section class="card">
-    <h2><span id="hemicycle-title">Assembly composition</span></h2>
+    <h2><span id="hemicycle-title">Composition de l'Assemblée</span></h2>
     <div id="hemicycle-wrap" style="position:relative">
         <svg id="hemicycle"></svg>
         <div id="hemicycle-tooltip" class="tooltip" style="display:none"></div>
     </div>
     <div class="comp-legend" id="hemicycle-legend"></div>
-    <p id="hemicycle-hint" class="lede" style="text-align:center;margin:0.3rem 0 0"><a href="#" id="hemicycle-back" style="display:none">← Back to all groups</a></p>
+    <p id="hemicycle-hint" class="lede" style="text-align:center;margin:0.3rem 0 0"><a href="#" id="hemicycle-back" style="display:none">← Retour aux groupes</a></p>
 </section>
 
 <div class="grid">
     <section class="card">
-        <h2>Top 10 companies (≥2 holders)</h2>
+        <h2>Top 10 sociétés (≥2 détenteurs)</h2>
         <div class="chart-box"><canvas id="chart-top"></canvas></div>
     </section>
     <section class="card">
-        <h2>Top 10, stacked by party</h2>
+        <h2>Top 10, par parti</h2>
         <div class="chart-box"><canvas id="chart-stack"></canvas></div>
     </section>
     <section class="card">
-        <h2>Recent new positions</h2>
+        <h2>Nouvelles positions récentes</h2>
         <div class="scroll">
             <table id="table-new">
-                <thead><tr><th>Company</th><th class="num">Holders</th><th class="num">Total €</th></tr></thead>
+                <thead><tr><th>Société</th><th class="num">Détenteurs</th><th class="num">Total €</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
     </section>
     <section class="card">
-        <h2>Biggest position growths</h2>
+        <h2>Plus fortes progressions</h2>
         <div class="scroll">
             <table id="table-grown">
-                <thead><tr><th>Company</th><th class="num">Holders</th><th class="num">Δ €</th></tr></thead>
+                <thead><tr><th>Société</th><th class="num">Détenteurs</th><th class="num">Δ €</th></tr></thead>
                 <tbody></tbody>
             </table>
         </div>
     </section>
     <section class="card conflict-card" style="grid-column: 1 / -1">
-        <h2>⚠ Potential conflicts of interest</h2>
-        <p class="disclaimer">Flags are mechanical co-occurrences between declared holdings (or spouse employers) and sector-related votes. They indicate potential conflicts, not wrongdoing.</p>
+        <h2>⚠ Conflits d'intérêts potentiels</h2>
+        <p class="disclaimer">Les signalements sont des co-occurrences mécaniques entre les participations déclarées (ou employeurs du conjoint) et les votes liés à un secteur. Ils indiquent des conflits potentiels, pas des fautes.</p>
         <table id="table-conflicts">
             <thead><tr>
-                <th>Name</th><th>Party</th>
-                <th class="num">Flagged votes</th>
-                <th class="num">Holdings in flagged sectors</th>
-                <th class="num">Spouse flags</th>
+                <th>Nom</th><th>Parti</th>
+                <th class="num">Votes signalés</th>
+                <th class="num">€ dans secteurs signalés</th>
+                <th class="num">Signalements conjoint</th>
             </tr></thead>
             <tbody></tbody>
         </table>
@@ -95,7 +95,7 @@
 
     function renderParliament(groups) {
         hSvg.selectAll('*').remove();
-        hTitle.textContent = 'Assembly composition';
+        hTitle.textContent = 'Composition de l\'Assemblée';
         hBack.style.display = 'none';
 
         const W = hWrap.clientWidth || 800;
@@ -128,7 +128,7 @@
                         .style('cursor', 'pointer')
                         .on('mouseenter', function(e) {
                             d3.select(this).attr('r', parseFloat(d3.select(this).attr('r')) * 1.5);
-                            hTooltip.innerHTML = `<strong>${esc(gRef.label)}</strong><br>${gRef.n_seats} seats · ${pv.formatEur(gRef.total_eur)}`;
+                            hTooltip.innerHTML = `<strong>${esc(gRef.label)}</strong><br>${gRef.n_seats} sièges · ${pv.formatEur(gRef.total_eur)}`;
                             hTooltip.style.display = 'block';
                             const rect = hWrap.getBoundingClientRect();
                             hTooltip.style.left = (e.clientX - rect.left + 12) + 'px';
@@ -152,7 +152,7 @@
     }
 
     async function drillDown(slug, label, color) {
-        hTitle.textContent = label + ' — individual members';
+        hTitle.textContent = label + ' — membres individuels';
         hBack.style.display = 'inline';
         hLegend.innerHTML = '';
         const seats = await pv.fetchJSON('/api/hemicycle?scope={{ scope }}&party=' + slug);

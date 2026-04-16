@@ -62,7 +62,7 @@ window.pv = (function () {
     function fillTable(id, rows, columns) {
         const tbody = document.querySelector('#' + id + ' tbody');
         if (!rows || rows.length === 0) {
-            tbody.innerHTML = `<tr><td colspan="${columns || 3}" class="empty">No data for this period.</td></tr>`;
+            tbody.innerHTML = `<tr><td colspan="${columns || 3}" class="empty">Aucune donnée pour cette période.</td></tr>`;
             return;
         }
         return rows; // signal to caller that data exists
@@ -74,6 +74,36 @@ window.pv = (function () {
 
     function gridColor() {
         return window.matchMedia('(prefers-color-scheme: dark)').matches ? '#2b2c28' : '#e5e5e0';
+    }
+
+    // --- Live search in nav ---
+    const searchInput = document.getElementById('search-input');
+    const searchResults = document.getElementById('search-results');
+    let searchTimer = null;
+
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            clearTimeout(searchTimer);
+            const q = searchInput.value.trim();
+            if (q.length < 2) { searchResults.style.display = 'none'; return; }
+            searchTimer = setTimeout(async () => {
+                const results = await fetchJSON('/api/search?q=' + encodeURIComponent(q));
+                if (!results.length) {
+                    searchResults.innerHTML = '<a style="pointer-events:none;color:var(--muted)">Aucun résultat</a>';
+                } else {
+                    searchResults.innerHTML = results.map(r =>
+                        `<a href="/declarant/${r.id}">` +
+                        `<span class="party-pill" style="background:${r.party_color};font-size:0.65rem">${escapeHtml(r.party_label)}</span> ` +
+                        `${escapeHtml(r.prenom)} ${escapeHtml(r.nom)}</a>`
+                    ).join('');
+                }
+                searchResults.style.display = 'block';
+            }, 250);
+        });
+
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.search-wrap')) searchResults.style.display = 'none';
+        });
     }
 
     return { fetchJSON, barChart, stackedBarChart, formatEur, fillTable, escapeHtml, gridColor };

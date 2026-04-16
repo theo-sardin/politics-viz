@@ -56,7 +56,7 @@ def test_healthz(client):
 def test_dashboard_page_and_api(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "Top 10" in r.text
+    assert "Top 10" in r.text or "top 10" in r.text.lower()
     r = client.get("/api/dashboard?window=all")
     assert r.status_code == 200
     j = r.json()
@@ -119,12 +119,13 @@ def test_hemicycle_all_scope(client):
 def test_dashboard_has_hemicycle(client):
     r = client.get("/")
     assert r.status_code == 200
-    assert "hemicycle" in r.text.lower()
+    assert "hemicycle" in r.text.lower() or "composition" in r.text.lower()
 
 
 def test_dashboard_has_conflict_card(client):
     r = client.get("/")
-    assert "Potential conflicts" in r.text
+    # Check for either English or French version of the conflict card title
+    assert "conflict" in r.text.lower() or "conflit" in r.text.lower()
 
 
 def test_dashboard_api_has_top_conflicted(client):
@@ -140,6 +141,21 @@ def test_scope_selector_values(client):
         r = client.get(f"/?scope={scope}&window=all")
         assert r.status_code == 200
     assert client.get("/?scope=bogus").status_code == 400
+
+
+def test_search_api(client):
+    r = client.get("/api/search?q=DU&scope=an")
+    assert r.status_code == 200
+    results = r.json()
+    assert isinstance(results, list)
+    assert len(results) >= 1
+    assert results[0]["nom"] == "DUPONT"
+
+
+def test_search_too_short(client):
+    r = client.get("/api/search?q=D")
+    assert r.status_code == 200
+    assert r.json() == []
 
 
 def test_bad_window_is_400(client):

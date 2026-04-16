@@ -182,6 +182,18 @@ def api_party(
     )
 
 
+@app.get("/api/search")
+def api_search(
+    q: str = Query(""),
+    scope: str = Query("an"),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> JSONResponse:
+    scope = _validate_scope(scope)
+    if len(q) < 2:
+        return JSONResponse([])
+    return JSONResponse(queries.search_declarants(conn, q, scope=scope))
+
+
 @app.get("/api/hemicycle")
 def api_hemicycle(
     scope: str = Query("an"),

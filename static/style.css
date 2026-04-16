@@ -55,6 +55,54 @@ nav a {
 
 nav a:hover { color: var(--fg); }
 
+.search-wrap {
+    position: relative;
+    margin-left: auto;
+}
+
+.search-wrap input {
+    font-family: var(--sans);
+    font-size: 0.85rem;
+    padding: 0.3rem 0.6rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--bg);
+    color: var(--fg);
+    width: 220px;
+    outline: none;
+}
+
+.search-wrap input:focus { border-color: var(--accent); }
+
+.search-results {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    width: 320px;
+    max-height: 300px;
+    overflow-y: auto;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    display: none;
+    z-index: 100;
+}
+
+.search-results a {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    text-decoration: none;
+    color: var(--fg);
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--border);
+}
+
+.search-results a:last-child { border-bottom: none; }
+.search-results a:hover { background: var(--border); }
+
 main {
     max-width: 1280px;
     margin: 0 auto;

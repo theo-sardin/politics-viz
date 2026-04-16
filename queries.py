@@ -550,6 +550,34 @@ def hemicycle(conn: sqlite3.Connection, scope: Scope = "an") -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def search_declarants(
+    conn: sqlite3.Connection, q: str, scope: Scope = "an", limit: int = 20
+) -> list[dict]:
+    """Search declarants by name prefix (accent-insensitive)."""
+    from parsers.normalize import strip_accents
+    folded = "%" + strip_accents(q).lower() + "%"
+    rows = conn.execute(
+        f"""
+        SELECT de.id, de.nom, de.prenom,
+               COALESCE(p.slug, 'none') AS party_slug,
+               COALESCE(p.label, 'Non affilié') AS party_label,
+               COALESCE(p.color, '#999999') AS party_color
+        FROM declarant de
+        LEFT JOIN party p ON de.party_id = p.id
+        WHERE EXISTS (
+            SELECT 1 FROM declaration d
+            WHERE d.declarant_id = de.id AND {scope_clause(scope)}
+        )
+        AND (LOWER(de.nom) LIKE ? OR LOWER(de.prenom) LIKE ?
+             OR (LOWER(de.prenom) || ' ' || LOWER(de.nom)) LIKE ?)
+        ORDER BY de.nom
+        LIMIT ?
+        """,
+        (folded, folded, folded, limit),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def declarant_vote_count(conn: sqlite3.Connection, declarant_id: int) -> int:
     """Total votes cast by this declarant."""
     row = conn.execute(
