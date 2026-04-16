@@ -25,10 +25,13 @@
 </div>
 
 <section class="card">
-    <h2><span id="hemicycle-title">Assembly composition — holdings by group</span></h2>
-    <div id="hemicycle" class="composition-bar-wrap"></div>
-    <div id="hemicycle-tooltip" class="tooltip" style="display:none"></div>
-    <p id="hemicycle-hint" class="lede" style="text-align:center;margin:0.4rem 0 0"><a href="#" id="hemicycle-back" style="display:none">← Back to all groups</a></p>
+    <h2><span id="hemicycle-title">Assembly composition</span></h2>
+    <div id="hemicycle-wrap" style="position:relative">
+        <svg id="hemicycle"></svg>
+        <div id="hemicycle-tooltip" class="tooltip" style="display:none"></div>
+    </div>
+    <div class="comp-legend" id="hemicycle-legend"></div>
+    <p id="hemicycle-hint" class="lede" style="text-align:center;margin:0.3rem 0 0"><a href="#" id="hemicycle-back" style="display:none">← Back to all groups</a></p>
 </section>
 
 <div class="grid">
@@ -79,93 +82,122 @@
 (async function () {
     try {
     const esc = pv.escapeHtml;
-    const hContainer = document.getElementById('hemicycle');
+    const hSvg = d3.select('#hemicycle');
     const hTooltip = document.getElementById('hemicycle-tooltip');
     const hTitle = document.getElementById('hemicycle-title');
     const hBack = document.getElementById('hemicycle-back');
+    const hLegend = document.getElementById('hemicycle-legend');
+    const hWrap = document.getElementById('hemicycle-wrap');
 
-    // --- Composition bar: grouped (default) + drilldown to party members ---
     const groups = await pv.fetchJSON('/api/hemicycle/groups?scope={{ scope }}');
-    renderGroups(groups);
-    hBack.addEventListener('click', (e) => { e.preventDefault(); renderGroups(groups); });
+    renderParliament(groups);
+    hBack.addEventListener('click', (e) => { e.preventDefault(); renderParliament(groups); });
 
-    function renderGroups(groups) {
-        hContainer.innerHTML = '';
-        hTitle.textContent = 'Assembly composition — holdings by group';
+    function renderParliament(groups) {
+        hSvg.selectAll('*').remove();
+        hTitle.textContent = 'Assembly composition';
         hBack.style.display = 'none';
-        const totalSeats = groups.reduce((s, g) => s + g.n_seats, 0);
-        if (!totalSeats) { hContainer.textContent = 'No data.'; return; }
 
-        const bar = document.createElement('div');
-        bar.className = 'composition-bar';
+        const W = hWrap.clientWidth || 800;
+        const H = Math.round(W * 0.38);
+        hSvg.attr('width', W).attr('height', H);
+
+        const totalSeats = groups.reduce((s, g) => s + g.n_seats, 0);
+        if (!totalSeats) return;
+
+        const seatData = groups.map(g => ({ seats: g.n_seats, color: g.color }));
+        const seatR = Math.max(3, Math.min(8, W / (totalSeats * 0.7)));
+        const chart = d3.parliamentChart()
+            .width(W)
+            .seatRadius(seatR)
+            .rowHeight(seatR * 3)
+            .sectionGap(seatR * 1.5)
+            .aggregatedData(seatData);
+
+        hSvg.call(chart);
+
+        // Add hover + click per section (group of circles)
+        let seatIdx = 0;
+        const circles = hSvg.selectAll('circle');
         for (const g of groups) {
-            const pct = (g.n_seats / totalSeats * 100);
-            if (pct < 0.5) continue;
-            const seg = document.createElement('div');
-            seg.className = 'comp-seg';
-            seg.style.width = pct + '%';
-            seg.style.background = g.color;
-            if (pct > 5) seg.innerHTML = `<span class="comp-label">${g.n_seats}</span>`;
-            seg.addEventListener('mouseenter', (e) => {
-                hTooltip.innerHTML = `<strong>${esc(g.label)}</strong><br>${g.n_seats} seats · ${pv.formatEur(g.total_eur)}`;
-                hTooltip.style.display = 'block';
-                const r = hContainer.getBoundingClientRect();
-                hTooltip.style.left = (e.clientX - r.left + 12) + 'px';
-                hTooltip.style.top = (e.clientY - r.top - 50) + 'px';
-            });
-            seg.addEventListener('mousemove', (e) => {
-                const r = hContainer.getBoundingClientRect();
-                hTooltip.style.left = (e.clientX - r.left + 12) + 'px';
-                hTooltip.style.top = (e.clientY - r.top - 50) + 'px';
-            });
-            seg.addEventListener('mouseleave', () => { hTooltip.style.display = 'none'; });
-            seg.addEventListener('click', () => drillDown(g.slug, g.label, g.color));
-            bar.appendChild(seg);
+            for (let i = 0; i < g.n_seats; i++) {
+                const node = circles.nodes()[seatIdx];
+                if (node) {
+                    const gRef = g;
+                    d3.select(node)
+                        .style('cursor', 'pointer')
+                        .on('mouseenter', function(e) {
+                            d3.select(this).attr('r', parseFloat(d3.select(this).attr('r')) * 1.5);
+                            hTooltip.innerHTML = `<strong>${esc(gRef.label)}</strong><br>${gRef.n_seats} seats · ${pv.formatEur(gRef.total_eur)}`;
+                            hTooltip.style.display = 'block';
+                            const rect = hWrap.getBoundingClientRect();
+                            hTooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                            hTooltip.style.top = (e.clientY - rect.top - 45) + 'px';
+                        })
+                        .on('mouseleave', function() {
+                            d3.select(this).attr('r', chart.seatRadius());
+                            hTooltip.style.display = 'none';
+                        })
+                        .on('click', () => drillDown(gRef.slug, gRef.label, gRef.color));
+                }
+                seatIdx++;
+            }
         }
-        hContainer.appendChild(bar);
 
         // Legend
-        const legend = document.createElement('div');
-        legend.className = 'comp-legend';
-        for (const g of groups) {
-            if (g.n_seats < totalSeats * 0.02) continue;
-            legend.innerHTML += `<span class="comp-legend-item"><span class="comp-dot" style="background:${g.color}"></span>${esc(g.label)} <span class="comp-eur">${pv.formatEur(g.total_eur)}</span></span>`;
-        }
-        hContainer.appendChild(legend);
+        hLegend.innerHTML = groups
+            .filter(g => g.n_seats > totalSeats * 0.02)
+            .map(g => `<span class="comp-legend-item"><span class="comp-dot" style="background:${g.color}"></span>${esc(g.label)} (${g.n_seats}) <span class="comp-eur">${pv.formatEur(g.total_eur)}</span></span>`)
+            .join('');
     }
 
     async function drillDown(slug, label, color) {
-        hTitle.textContent = label + ' — members by holdings';
+        hTitle.textContent = label + ' — individual members';
         hBack.style.display = 'inline';
+        hLegend.innerHTML = '';
         const seats = await pv.fetchJSON('/api/hemicycle?scope={{ scope }}&party=' + slug);
-        hContainer.innerHTML = '';
+        if (!seats.length) { hSvg.selectAll('*').remove(); return; }
 
-        if (!seats.length) { hContainer.textContent = 'No members.'; return; }
         seats.sort((a, b) => b.total - a.total);
+        const W = hWrap.clientWidth || 800;
+        const H = Math.round(W * 0.38);
+        hSvg.selectAll('*').remove();
+        hSvg.attr('width', W).attr('height', H);
 
-        const bar = document.createElement('div');
-        bar.className = 'composition-bar members-bar';
-        const maxTotal = seats[0].total || 1;
-        for (const s of seats) {
-            const seg = document.createElement('div');
-            seg.className = 'comp-seg member-seg';
-            seg.style.flex = '1';
-            const opacity = 0.3 + 0.7 * Math.min(s.total / (maxTotal * 0.5), 1);
-            seg.style.background = color;
-            seg.style.opacity = opacity;
-            seg.addEventListener('mouseenter', (e) => {
-                seg.style.opacity = '1';
-                hTooltip.innerHTML = `<strong>${esc(s.prenom)} ${esc(s.nom)}</strong><br>${pv.formatEur(s.total)}`;
-                hTooltip.style.display = 'block';
-                const r = hContainer.getBoundingClientRect();
-                hTooltip.style.left = (e.clientX - r.left + 12) + 'px';
-                hTooltip.style.top = (e.clientY - r.top - 50) + 'px';
-            });
-            seg.addEventListener('mouseleave', () => { seg.style.opacity = opacity; hTooltip.style.display = 'none'; });
-            seg.addEventListener('click', () => { window.location = '/declarant/' + s.id; });
-            bar.appendChild(seg);
-        }
-        hContainer.appendChild(bar);
+        const n = seats.length;
+        const seatR = Math.max(4, Math.min(10, W / (n * 0.7)));
+        const seatData = seats.map(() => ({ seats: 1, color }));
+        const chart = d3.parliamentChart()
+            .width(W)
+            .seatRadius(seatR)
+            .rowHeight(seatR * 3)
+            .sectionGap(0)
+            .aggregatedData(seatData);
+        hSvg.call(chart);
+
+        const maxHolding = Math.max(...seats.map(s => s.total), 1);
+        const circles = hSvg.selectAll('circle');
+        circles.each(function(d, i) {
+            if (i >= seats.length) return;
+            const s = seats[i];
+            const op = 0.3 + 0.7 * Math.min(s.total / (maxHolding * 0.3), 1);
+            d3.select(this)
+                .attr('opacity', op)
+                .style('cursor', 'pointer')
+                .on('mouseenter', function(e) {
+                    d3.select(this).attr('opacity', 1).attr('r', chart.seatRadius() * 1.5);
+                    hTooltip.innerHTML = `<strong>${esc(s.prenom)} ${esc(s.nom)}</strong><br>${pv.formatEur(s.total)}`;
+                    hTooltip.style.display = 'block';
+                    const rect = hWrap.getBoundingClientRect();
+                    hTooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                    hTooltip.style.top = (e.clientY - rect.top - 45) + 'px';
+                })
+                .on('mouseleave', function() {
+                    d3.select(this).attr('opacity', op).attr('r', chart.seatRadius());
+                    hTooltip.style.display = 'none';
+                })
+                .on('click', () => { window.location = '/declarant/' + s.id; });
+        });
     }
 
     // --- Dashboard data ---
