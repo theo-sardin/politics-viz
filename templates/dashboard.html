@@ -25,7 +25,7 @@
 </div>
 
 <section class="card">
-    <h2><span id="hemicycle-title">Députés détenteurs de participations financières</span></h2>
+    <h2><span id="hemicycle-title">Composition de l'Assemblée</span></h2>
     <div id="hemicycle-wrap" style="position:relative">
         <svg id="hemicycle"></svg>
         <div id="hemicycle-tooltip" class="tooltip" style="display:none"></div>
@@ -95,7 +95,7 @@
 
     function renderParliament(groups) {
         hSvg.selectAll('*').remove();
-        hTitle.textContent = 'Députés détenteurs de participations financières';
+        hTitle.textContent = "Composition de l'Assemblée";
         hBack.style.display = 'none';
 
         const W = hWrap.clientWidth || 800;
