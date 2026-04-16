@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}{{ party.label }} — politics-viz{% endblock %}
 {% block main %}
+<div class="party-tint" style="--party-color: {{ party.color }}">
 <p><a href="/">← Dashboard</a></p>
 <h1>
     <span class="party-pill" style="background: {{ party.color }}">{{ party.label }}</span>
@@ -32,41 +33,45 @@
         </table>
     </section>
 </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
 (async function () {
+    const esc = pv.escapeHtml;
     const data = await pv.fetchJSON('/api/party/{{ party.slug }}?window={{ window }}');
 
     const top = data.top_companies;
     pv.barChart(document.getElementById('chart-top'), {
-        labels: top.map(c => c.name || c.slug),
+        labels: top.map(c => c.name),
         data: top.map(c => c.total),
         color: {{ party.color | tojson }},
         onBarClick: (i) => { window.location = '/company/' + top[i].slug; },
     });
 
     const surges = data.surges;
-    document.querySelector('#table-surges tbody').innerHTML = surges.map(r => `
-        <tr>
-            <td><a href="/company/${r.slug}">${escapeHtml(r.name || r.slug)}</a></td>
-            <td>${r.change_type}</td>
-            <td class="num">${pv.formatEur(r.delta)}</td>
-        </tr>`).join('');
+    if (pv.fillTable('table-surges', surges, 3)) {
+        document.querySelector('#table-surges tbody').innerHTML = surges.map(r => `
+            <tr>
+                <td><a href="/company/${r.slug}">${esc(r.name)}</a></td>
+                <td>${r.change_type}</td>
+                <td class="num">${pv.formatEur(r.delta)}</td>
+            </tr>`).join('');
+    }
 
     const members = data.members;
     document.getElementById('count-members').textContent = members.length;
-    document.querySelector('#table-members tbody').innerHTML = members.map(m => `
-        <tr>
-            <td><a href="/declarant/${m.id}">${escapeHtml(m.prenom)} ${escapeHtml(m.nom)}</a></td>
-            <td class="num">${pv.formatEur(m.total)}</td>
-        </tr>`).join('');
-
-    function escapeHtml(s) {
-        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    if (members.length === 0) {
+        document.querySelector('#table-members tbody').innerHTML =
+            '<tr><td colspan="2" class="empty">No members found.</td></tr>';
+    } else {
+        document.querySelector('#table-members tbody').innerHTML = members.map(m => `
+            <tr>
+                <td><a href="/declarant/${m.id}">${esc(m.prenom)} ${esc(m.nom)}</a></td>
+                <td class="num">${pv.formatEur(m.total)}</td>
+            </tr>`).join('');
     }
 })();
 </script>
 {% endblock %}
-

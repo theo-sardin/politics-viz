@@ -57,20 +57,21 @@
 {% block scripts %}
 <script>
 (async function () {
+    const esc = pv.escapeHtml;
     const data = await pv.fetchJSON('/api/dashboard?window={{ window }}&scope={{ scope }}');
 
-    // Card 1: top companies (single bar)
+    // Card 1: top companies bar
     const top = data.top_companies;
     pv.barChart(document.getElementById('chart-top'), {
-        labels: top.map(c => c.name || c.slug),
+        labels: top.map(c => c.name),
         data: top.map(c => c.total),
         onBarClick: (i) => { window.location = '/company/' + top[i].slug; },
     });
 
-    // Card 2: stacked-by-party
+    // Card 2: stacked by party
     const tbp = data.top_by_party;
     pv.stackedBarChart(document.getElementById('chart-stack'), {
-        labels: tbp.companies.map(c => c.name || c.slug),
+        labels: tbp.companies.map(c => c.name),
         datasets: tbp.parties.map((p, pi) => ({
             label: p.label,
             backgroundColor: p.color,
@@ -79,25 +80,20 @@
         onBarClick: (i) => { window.location = '/company/' + tbp.companies[i].slug; },
     });
 
-    // Card 3 + 4: tables
-    fillTable('table-new', data.surges_new);
-    fillTable('table-grown', data.surges_grown);
+    // Card 3 + 4: surge tables
+    renderSurgeTable('table-new', data.surges_new);
+    renderSurgeTable('table-grown', data.surges_grown);
 
-    function fillTable(id, rows) {
+    function renderSurgeTable(id, rows) {
+        if (!pv.fillTable(id, rows, 3)) return;
         const tbody = document.querySelector('#' + id + ' tbody');
         tbody.innerHTML = rows.map(r => `
             <tr>
-                <td><a href="/company/${r.slug}">${escapeHtml(r.name || r.slug)}</a></td>
+                <td><a href="/company/${r.slug}">${esc(r.name)}</a></td>
                 <td class="num">${r.n_people}</td>
                 <td class="num">${pv.formatEur(r.total)}</td>
-            </tr>
-        `).join('');
-    }
-
-    function escapeHtml(s) {
-        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+            </tr>`).join('');
     }
 })();
 </script>
 {% endblock %}
-

@@ -1,5 +1,5 @@
 /* Vanilla helpers to fetch JSON and render Chart.js charts.
-   Exported globals: pv.fetchJSON, pv.barChart, pv.stackedBarChart. */
+   Exported globals: pv.fetchJSON, pv.barChart, pv.stackedBarChart, pv.formatEur, pv.fillTable. */
 window.pv = (function () {
     async function fetchJSON(url) {
         const r = await fetch(url);
@@ -8,10 +8,9 @@ window.pv = (function () {
     }
 
     function barChart(canvas, { labels, data, color = "#0d378a", onBarClick, label = "" }) {
-        const ctx = canvas.getContext("2d");
-        const chart = new Chart(ctx, {
+        return new Chart(canvas.getContext("2d"), {
             type: "bar",
-            data: { labels, datasets: [{ label, data, backgroundColor: color }] },
+            data: { labels, datasets: [{ label, data, backgroundColor: color, borderRadius: 3 }] },
             options: {
                 indexAxis: "y",
                 responsive: true,
@@ -22,31 +21,30 @@ window.pv = (function () {
                     onBarClick(items[0].index);
                 },
                 scales: {
-                    x: { ticks: { callback: (v) => formatEur(v) } },
-                    y: { ticks: { autoSkip: false, font: { size: 11 } } },
+                    x: { ticks: { callback: (v) => formatEur(v) }, grid: { color: gridColor() } },
+                    y: { ticks: { autoSkip: false, font: { size: 11 } }, grid: { display: false } },
                 },
             },
         });
-        return chart;
     }
 
     function stackedBarChart(canvas, { labels, datasets, onBarClick }) {
-        const ctx = canvas.getContext("2d");
-        return new Chart(ctx, {
+        datasets.forEach(ds => { ds.borderRadius = 2; });
+        return new Chart(canvas.getContext("2d"), {
             type: "bar",
             data: { labels, datasets },
             options: {
                 indexAxis: "y",
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
+                plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 10 }, padding: 8 } } },
                 onClick: (evt, items) => {
                     if (!onBarClick || !items.length) return;
                     onBarClick(items[0].index);
                 },
                 scales: {
-                    x: { stacked: true, ticks: { callback: (v) => formatEur(v) } },
-                    y: { stacked: true, ticks: { autoSkip: false, font: { size: 11 } } },
+                    x: { stacked: true, ticks: { callback: (v) => formatEur(v) }, grid: { color: gridColor() } },
+                    y: { stacked: true, ticks: { autoSkip: false, font: { size: 11 } }, grid: { display: false } },
                 },
             },
         });
@@ -61,5 +59,22 @@ window.pv = (function () {
         return n + " €";
     }
 
-    return { fetchJSON, barChart, stackedBarChart, formatEur };
+    function fillTable(id, rows, columns) {
+        const tbody = document.querySelector('#' + id + ' tbody');
+        if (!rows || rows.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="${columns || 3}" class="empty">No data for this period.</td></tr>`;
+            return;
+        }
+        return rows; // signal to caller that data exists
+    }
+
+    function escapeHtml(s) {
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+
+    function gridColor() {
+        return window.matchMedia('(prefers-color-scheme: dark)').matches ? '#2b2c28' : '#e5e5e0';
+    }
+
+    return { fetchJSON, barChart, stackedBarChart, formatEur, fillTable, escapeHtml, gridColor };
 })();
