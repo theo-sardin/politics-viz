@@ -442,8 +442,10 @@ def top_conflicted(
         FROM conflict_flag cf
         JOIN declarant de ON cf.declarant_id = de.id
         LEFT JOIN party p ON de.party_id = p.id
-        JOIN declaration d ON d.declarant_id = de.id
-        WHERE {scope_clause(scope)}
+        WHERE EXISTS (
+            SELECT 1 FROM declaration d
+            WHERE d.declarant_id = de.id AND {scope_clause(scope)}
+        )
         GROUP BY de.id
         ORDER BY n_flags DESC
         LIMIT ?

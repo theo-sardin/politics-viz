@@ -9,7 +9,6 @@ for votes that land in 'neutral' or unclassified.
 
 from __future__ import annotations
 
-import re
 import sqlite3
 from dataclasses import dataclass, field
 
@@ -65,19 +64,20 @@ SECTORS: list[SectorDef] = [
     ], ["defense", "militaire", "armement"], ["thales", "dassault"]),
 
     SectorDef("tech", "Numérique", [
-        "numerique", "donnees", "intelligence artificielle", "telecom",
-        "cyber", "numerique", "plateforme", "algorithme",
+        "numerique", "donnees", "intelligence artificielle",
+        "cyber", "plateforme", "algorithme",
     ], ["numerique", "tech", "logiciel", "informatique"],
        ["sopra-steria-group", "capgemini"]),
 
     SectorDef("telecom", "Télécom", [
-        "telecom", "fibre", "mobile", "frequence", "spectre", "5g", "reseau",
+        "telecom", "fibre optique", "frequence", "spectre", "5g",
+        "telephonie", "operateur mobile",
     ], ["telecom", "fibre"], ["orange"]),
 
     SectorDef("agri", "Agriculture", [
-        "agricol", "pac", "alimentaire", "pesticide", "phytosanit",
-        "exploitation agricole", "elevage",
-    ], ["agricol", "alimentaire"]),
+        "agricol", "pac", "pesticide", "phytosanit",
+        "exploitation agricole", "elevage", "foncier agricole",
+    ], ["agricol"]),
 
     SectorDef("real_estate", "Immobilier", [
         "immobilier", "logement", "foncier", "urbanis", "copropriete",

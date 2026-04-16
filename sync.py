@@ -22,7 +22,8 @@ import db
 from parsers.hatvp import DeclarationRecord, parse
 from parsers.normalize import person_key
 from parsers.parties import cmd_parties
-from parsers.sectors import cmd_sectors
+from parsers.normalize import company_slug as make_slug
+from parsers.sectors import cmd_sectors, tag_company
 from parsers.votes import fetch_scrutin_detail, fetch_scrutin_list
 
 log = logging.getLogger(__name__)
@@ -253,31 +254,31 @@ def cmd_conflicts(conn: sqlite3.Connection) -> dict[str, int]:
         if not _is_aligned(direction, position):
             continue
         score = decl_sectors[did][sector]
-        companies = ", ".join(decl_companies.get(did, {}).get(sector, [])[:3])
+        companies = decl_companies.get(did, {}).get(sector, [])[:3]
+        company_names = ", ".join(companies)
+        slug = make_slug(companies[0]) if companies else ""
         reason = (
-            f"Détient {_fmt_eur(score)} dans {companies} ({sector}). "
+            f"Détient {_fmt_eur(score)} dans {company_names} ({sector}). "
             f"A voté {position} sur «{r['titre'][:80]}…» ({direction}-{sector})."
         )
         cur.execute(
             """INSERT INTO conflict_flag
                (declarant_id, vote_id, company_slug, sector, score, reason, source)
                VALUES (?, ?, ?, ?, ?, ?, 'holding')""",
-            (did, r["vote_id"], companies, sector, score, reason),
+            (did, r["vote_id"], slug, sector, score, reason),
         )
         stats["flags_holding"] += 1
 
     # ---- Flags from spouse employers ----
-    from parsers.sectors import tag_company
     for r in cur.execute(
         "SELECT id, spouse_employers FROM declarant WHERE spouse_employers IS NOT NULL"
     ).fetchall():
         employers = json.loads(r["spouse_employers"])
-        spouse_sectors: dict[str, str] = {}  # sector → employer name
+        spouse_sectors: dict[str, tuple[str, str]] = {}  # sector → (slug, name)
         for emp in employers:
-            from parsers.normalize import company_slug
-            slug = company_slug(emp)
+            slug = make_slug(emp)
             for sec in tag_company(slug, emp):
-                spouse_sectors.setdefault(sec, emp)
+                spouse_sectors.setdefault(sec, (slug, emp))
         if not spouse_sectors:
             continue
         did = r["id"]
@@ -293,7 +294,7 @@ def cmd_conflicts(conn: sqlite3.Connection) -> dict[str, int]:
                 continue
             if not _is_aligned(vp["direction"], vp["position"]):
                 continue
-            emp_name = spouse_sectors[sector]
+            emp_slug, emp_name = spouse_sectors[sector]
             reason = (
                 f"Conjoint(e) travaille chez {emp_name} ({sector}). "
                 f"A voté {vp['position']} sur «{vp['titre'][:80]}…» ({vp['direction']}-{sector})."
@@ -302,7 +303,7 @@ def cmd_conflicts(conn: sqlite3.Connection) -> dict[str, int]:
                 """INSERT INTO conflict_flag
                    (declarant_id, vote_id, company_slug, sector, score, reason, source)
                    VALUES (?, ?, ?, ?, ?, ?, 'spouse')""",
-                (did, vp["vote_id"], emp_name, sector, 1, reason),
+                (did, vp["vote_id"], emp_slug, sector, 1, reason),
             )
             stats["flags_spouse"] += 1
 
