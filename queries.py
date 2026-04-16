@@ -492,7 +492,7 @@ def hemicycle_groups(conn: sqlite3.Connection, scope: Scope = "an", only_holders
             SELECT 1 FROM declaration dd
             WHERE dd.declarant_id = de.id AND {scope_clause(scope)}
         )
-        GROUP BY p.slug
+        GROUP BY COALESCE(p.slug, 'none')
         ORDER BY
             CASE COALESCE(p.slug, 'none')
                 WHEN 'lfi' THEN 1  WHEN 'pcf' THEN 2  WHEN 'eelv' THEN 3
