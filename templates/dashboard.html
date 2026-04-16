@@ -25,9 +25,10 @@
 </div>
 
 <section class="card hemicycle-card">
-    <h2>Hemicycle — holdings by seat</h2>
+    <h2>Hemicycle — <span id="hemicycle-title">holdings by party group</span></h2>
     <div id="hemicycle"></div>
     <div id="hemicycle-tooltip" class="tooltip" style="display:none"></div>
+    <p id="hemicycle-hint" class="lede" style="text-align:center;margin:0.3rem 0 0">Click a group to see individual seats. <a href="#" id="hemicycle-back" style="display:none">← Back to groups</a></p>
 </section>
 
 <div class="grid">
@@ -76,11 +77,29 @@
 {% block scripts %}
 <script>
 (async function () {
+    try {
     const esc = pv.escapeHtml;
 
-    // Hemicycle
-    const seats = await pv.fetchJSON('/api/hemicycle?scope={{ scope }}');
-    renderHemicycle(seats);
+    // Hemicycle DOM refs (must be before function calls due to TDZ)
+    const hContainer = document.getElementById('hemicycle');
+    const hTooltip = document.getElementById('hemicycle-tooltip');
+    const hTitle = document.getElementById('hemicycle-title');
+    const hBack = document.getElementById('hemicycle-back');
+
+    function svgEl(tag, attrs) {
+        const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
+        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+        return el;
+    }
+
+    // Hemicycle — starts in grouped mode
+    const groups = await pv.fetchJSON('/api/hemicycle/groups?scope={{ scope }}');
+    renderHemicycleGroups(groups);
+
+    document.getElementById('hemicycle-back').addEventListener('click', (e) => {
+        e.preventDefault();
+        renderHemicycleGroups(groups);
+    });
 
     const data = await pv.fetchJSON('/api/dashboard?window={{ window }}&scope={{ scope }}');
 
@@ -119,81 +138,156 @@
             </tr>`).join('');
     }
 
-    function renderHemicycle(seats) {
-        const container = document.getElementById('hemicycle');
-        const tooltip = document.getElementById('hemicycle-tooltip');
-        const W = container.clientWidth || 800;
-        const H = Math.min(W * 0.45, 320);
-        const cx = W / 2, cy = H * 0.92;
+    // --- Hemicycle rendering (rewritten for clean layout) ---
 
-        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-        svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
-        svg.setAttribute('width', W);
-        svg.setAttribute('height', H);
+    function arcPath(cx, cy, rInner, rOuter, startAngle, endAngle) {
+        // SVG path for a filled arc segment (wedge between two radii).
+        const x1o = cx - rOuter * Math.cos(startAngle), y1o = cy - rOuter * Math.sin(startAngle);
+        const x2o = cx - rOuter * Math.cos(endAngle),   y2o = cy - rOuter * Math.sin(endAngle);
+        const x2i = cx - rInner * Math.cos(endAngle),   y2i = cy - rInner * Math.sin(endAngle);
+        const x1i = cx - rInner * Math.cos(startAngle), y1i = cy - rInner * Math.sin(startAngle);
+        const large = (endAngle - startAngle > Math.PI) ? 1 : 0;
+        return `M ${x1o} ${y1o} A ${rOuter} ${rOuter} 0 ${large} 0 ${x2o} ${y2o} ` +
+               `L ${x2i} ${y2i} A ${rInner} ${rInner} 0 ${large} 1 ${x1i} ${y1i} Z`;
+    }
+
+    function renderHemicycleGroups(groups) {
+        hContainer.innerHTML = '';
+        hTitle.textContent = 'holdings by party group';
+        hBack.style.display = 'none';
+        const W = hContainer.clientWidth || 800, H = Math.min(W * 0.42, 280);
+        const cx = W / 2, cy = H + 4;
+        const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H + 8}`, width: W, height: H + 8 });
+        svg.style.display = 'block';
+
+        const totalSeats = groups.reduce((s, g) => s + g.n_seats, 0);
+        if (!totalSeats) { hContainer.textContent = 'No data.'; return; }
+
+        const rInner = H * 0.35, rOuter = H * 0.98;
+        const gap = 0.012;
+        let angle = 0.02;
+        const span = Math.PI - 0.04;
+
+        for (const g of groups) {
+            const frac = g.n_seats / totalSeats;
+            const sweep = span * frac;
+            const a1 = angle + gap / 2, a2 = angle + sweep - gap / 2;
+            if (a2 <= a1) { angle += sweep; continue; }
+
+            const path = svgEl('path', {
+                d: arcPath(cx, cy, rInner, rOuter, a1, a2),
+                fill: g.color, opacity: '0.85',
+            });
+            path.style.cursor = 'pointer';
+            path.style.transition = 'opacity 0.12s';
+            path.addEventListener('mouseenter', (e) => {
+                path.setAttribute('opacity', '1');
+                hTooltip.innerHTML = `<strong>${esc(g.label)}</strong><br>` +
+                    `${g.n_seats} seats · ${pv.formatEur(g.total_eur)}`;
+                hTooltip.style.display = 'block';
+                const rect = hContainer.getBoundingClientRect();
+                hTooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                hTooltip.style.top = (e.clientY - rect.top - 45) + 'px';
+            });
+            path.addEventListener('mouseleave', () => {
+                path.setAttribute('opacity', '0.85');
+                hTooltip.style.display = 'none';
+            });
+            path.addEventListener('click', () => drillDown(g.slug, g.label));
+            svg.appendChild(path);
+
+            // Label: seat count + total €
+            const midA = (a1 + a2) / 2, midR = (rInner + rOuter) / 2;
+            const lx = cx - midR * Math.cos(midA), ly = cy - midR * Math.sin(midA);
+            if (frac > 0.05) {
+                const t1 = svgEl('text', {
+                    x: lx, y: ly - 7, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+                    fill: '#fff', 'font-size': Math.max(10, Math.min(14, frac * 140)),
+                    'font-weight': '700', 'pointer-events': 'none',
+                });
+                t1.textContent = g.n_seats;
+                svg.appendChild(t1);
+                const t2 = svgEl('text', {
+                    x: lx, y: ly + 9, 'text-anchor': 'middle', 'dominant-baseline': 'central',
+                    fill: 'rgba(255,255,255,0.8)', 'font-size': Math.max(8, Math.min(11, frac * 100)),
+                    'pointer-events': 'none',
+                });
+                t2.textContent = pv.formatEur(g.total_eur);
+                svg.appendChild(t2);
+            }
+            angle += sweep;
+        }
+        hContainer.appendChild(svg);
+    }
+
+    async function drillDown(partySlug, partyLabel) {
+        hTitle.textContent = partyLabel + ' — individual seats';
+        hBack.style.display = 'inline';
+        const seats = await pv.fetchJSON('/api/hemicycle?scope={{ scope }}&party=' + partySlug);
+        renderHemicycleSeats(seats);
+    }
+
+    function renderHemicycleSeats(seats) {
+        hContainer.innerHTML = '';
+        const W = hContainer.clientWidth || 800, H = Math.min(W * 0.42, 280);
+        const cx = W / 2, cy = H + 4;
+        const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H + 8}`, width: W, height: H + 8 });
         svg.style.display = 'block';
 
         const n = seats.length;
-        if (n === 0) { container.textContent = 'No seats.'; return; }
+        if (!n) { hContainer.textContent = 'No seats.'; return; }
 
-        // Distribute seats across concentric semicircular rows.
+        // Fixed dot radius — no wild sizing. Subtle opacity for holdings.
+        const dotR = Math.max(3, Math.min(7, 180 / Math.sqrt(n)));
+        const spacing = dotR * 2.6;
+
+        // Compute how many rows fit and how many seats per row.
+        const rMin = H * 0.2, rMax = H * 0.95;
+        const nRows = Math.max(3, Math.round((rMax - rMin) / spacing));
         const rows = [];
-        const nRows = Math.max(6, Math.min(14, Math.ceil(n / 40)));
-        const rMin = H * 0.18, rMax = H * 0.88;
         let remaining = n;
-        for (let i = 0; i < nRows; i++) {
+        for (let i = 0; i < nRows && remaining > 0; i++) {
             const r = rMin + (rMax - rMin) * i / (nRows - 1);
-            const capacity = Math.floor(Math.PI * r / ((rMax - rMin) / nRows * 0.9));
-            const count = (i < nRows - 1) ? Math.min(capacity, Math.ceil(remaining / (nRows - i))) : remaining;
+            const perimeter = Math.PI * r * 0.92;
+            const cap = Math.floor(perimeter / spacing);
+            const count = (i < nRows - 1) ? Math.min(cap, Math.ceil(remaining / (nRows - i))) : remaining;
             rows.push({ r, count });
             remaining -= count;
         }
 
-        // Max holdings for sizing.
-        const maxLog = Math.log1p(Math.max(...seats.map(s => s.total), 1));
-
-        let seatIdx = 0;
+        const maxHolding = Math.max(...seats.map(s => s.total), 1);
+        let idx = 0;
         for (const { r, count } of rows) {
-            for (let j = 0; j < count && seatIdx < n; j++) {
-                const angle = Math.PI * (0.05 + 0.9 * j / Math.max(count - 1, 1));
-                const x = cx - r * Math.cos(angle);
-                const y = cy - r * Math.sin(angle);
-                const s = seats[seatIdx];
-                const baseR = (rMax - rMin) / nRows * 0.32;
-                const sizeR = baseR * (0.5 + 0.5 * Math.log1p(s.total) / maxLog);
+            for (let j = 0; j < count && idx < n; j++) {
+                const angle = Math.PI * (0.04 + 0.92 * j / Math.max(count - 1, 1));
+                const x = cx - r * Math.cos(angle), y = cy - r * Math.sin(angle);
+                const s = seats[idx];
+                // Subtle opacity: 0.4 (no holdings) → 1.0 (max holdings)
+                const op = 0.4 + 0.6 * Math.min(s.total / (maxHolding * 0.3), 1);
 
-                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-                circle.setAttribute('cx', x);
-                circle.setAttribute('cy', y);
-                circle.setAttribute('r', sizeR);
-                circle.setAttribute('fill', s.party_color);
-                circle.setAttribute('opacity', '0.85');
-                circle.style.cursor = 'pointer';
-                circle.style.transition = 'r 0.15s, opacity 0.15s';
-
-                circle.addEventListener('mouseenter', (e) => {
-                    circle.setAttribute('opacity', '1');
-                    circle.setAttribute('r', sizeR * 1.6);
-                    tooltip.innerHTML = `<strong>${esc(s.prenom)} ${esc(s.nom)}</strong><br>` +
-                        `<span class="party-pill" style="background:${s.party_color};font-size:0.65rem">${esc(s.party_label)}</span> ` +
-                        `${pv.formatEur(s.total)}`;
-                    tooltip.style.display = 'block';
-                    const rect = container.getBoundingClientRect();
-                    tooltip.style.left = (e.clientX - rect.left + 10) + 'px';
-                    tooltip.style.top = (e.clientY - rect.top - 40) + 'px';
+                const c = svgEl('circle', {
+                    cx: x, cy: y, r: dotR, fill: s.party_color, opacity: op.toFixed(2),
                 });
-                circle.addEventListener('mouseleave', () => {
-                    circle.setAttribute('opacity', '0.85');
-                    circle.setAttribute('r', sizeR);
-                    tooltip.style.display = 'none';
+                c.style.cursor = 'pointer';
+                c.style.transition = 'opacity 0.12s, r 0.12s';
+                c.addEventListener('mouseenter', (e) => {
+                    c.setAttribute('opacity', '1'); c.setAttribute('r', dotR * 1.4);
+                    hTooltip.innerHTML = `<strong>${esc(s.prenom)} ${esc(s.nom)}</strong><br>${pv.formatEur(s.total)}`;
+                    hTooltip.style.display = 'block';
+                    const rect = hContainer.getBoundingClientRect();
+                    hTooltip.style.left = (e.clientX - rect.left + 12) + 'px';
+                    hTooltip.style.top = (e.clientY - rect.top - 45) + 'px';
                 });
-                circle.addEventListener('click', () => {
-                    window.location = '/declarant/' + s.id;
+                c.addEventListener('mouseleave', () => {
+                    c.setAttribute('opacity', op.toFixed(2)); c.setAttribute('r', dotR);
+                    hTooltip.style.display = 'none';
                 });
-                svg.appendChild(circle);
-                seatIdx++;
+                c.addEventListener('click', () => { window.location = '/declarant/' + s.id; });
+                svg.appendChild(c);
+                idx++;
             }
         }
-        container.appendChild(svg);
+        hContainer.appendChild(svg);
     }
 
     // Card 5: conflicts
@@ -208,6 +302,7 @@
                 <td class="num">${r.n_spouse_flags || '—'}</td>
             </tr>`).join('');
     }
+    } catch(e) { console.error('Dashboard error:', e); document.getElementById('hemicycle').textContent = 'Error: ' + e.message; }
 })();
 </script>
 {% endblock %}

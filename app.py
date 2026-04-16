@@ -184,10 +184,23 @@ def api_party(
 
 @app.get("/api/hemicycle")
 def api_hemicycle(
+    scope: str = Query("an"),
+    party: str = Query(None),
+    conn: sqlite3.Connection = Depends(get_conn),
+) -> JSONResponse:
+    scope = _validate_scope(scope)
+    seats = queries.hemicycle(conn, scope=scope)
+    if party:
+        seats = [s for s in seats if s["party_slug"] == party]
+    return JSONResponse(seats)
+
+
+@app.get("/api/hemicycle/groups")
+def api_hemicycle_groups(
     scope: str = Query("an"), conn: sqlite3.Connection = Depends(get_conn)
 ) -> JSONResponse:
     scope = _validate_scope(scope)
-    return JSONResponse(queries.hemicycle(conn, scope=scope))
+    return JSONResponse(queries.hemicycle_groups(conn, scope=scope))
 
 
 @app.get("/api/dashboard")
