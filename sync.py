@@ -13,12 +13,17 @@ import json
 import logging
 import sqlite3
 import sys
+import time as _time
 from pathlib import Path
+
+import httpx
 
 import db
 from parsers.hatvp import DeclarationRecord, parse
 from parsers.normalize import person_key
 from parsers.parties import cmd_parties
+from parsers.sectors import cmd_sectors
+from parsers.votes import fetch_scrutin_detail, fetch_scrutin_list
 
 log = logging.getLogger(__name__)
 
@@ -120,6 +125,204 @@ def _upsert_declarant(cur: sqlite3.Cursor, rec: DeclarationRecord) -> int:
     return did
 
 
+def cmd_votes(conn: sqlite3.Connection) -> dict[str, int]:
+    """Fetch all AN scrutins from NosDéputés and upsert votes + positions.
+
+    Idempotent: only fetches scrutins whose numero isn't already in the DB.
+    """
+    stats = {"scrutins_fetched": 0, "scrutins_skipped": 0, "positions_inserted": 0}
+
+    # Build declarant lookup: parlementaire_slug → declarant_id.
+    # NosDéputés slugs are "firstname-lastname" lowercased.
+    slug_to_decl: dict[str, int] = {}
+    for r in conn.execute("SELECT id, nom, prenom FROM declarant"):
+        slug = f"{r['prenom']}-{r['nom']}".lower().replace(" ", "-")
+        slug_to_decl[slug] = r["id"]
+
+    existing = {
+        r[0]
+        for r in conn.execute("SELECT scrutin_numero FROM vote").fetchall()
+    }
+
+    with httpx.Client(timeout=30.0, follow_redirects=True) as client:
+        all_numeros = fetch_scrutin_list(client)
+        to_fetch = [n for n in all_numeros if n not in existing]
+        log.info("votes: %d total, %d to fetch, %d already in DB",
+                 len(all_numeros), len(to_fetch), len(existing))
+
+        for i, numero in enumerate(to_fetch):
+            try:
+                record, positions = fetch_scrutin_detail(client, numero)
+            except Exception as e:
+                log.warning("scrutin %d: %s", numero, e)
+                continue
+
+            cur = conn.cursor()
+            cur.execute(
+                """INSERT OR IGNORE INTO vote
+                   (scrutin_numero, date, type, titre, sort, n_pour, n_contre, n_abstention)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    record.scrutin_numero, record.date, record.type,
+                    record.titre, record.sort, record.n_pour,
+                    record.n_contre, record.n_abstention,
+                ),
+            )
+            vote_id = cur.execute(
+                "SELECT id FROM vote WHERE scrutin_numero = ?",
+                (record.scrutin_numero,),
+            ).fetchone()["id"]
+
+            for pos in positions:
+                decl_id = slug_to_decl.get(pos.parlementaire_slug)
+                if decl_id is None:
+                    continue
+                cur.execute(
+                    """INSERT INTO vote_position
+                       (vote_id, declarant_id, position, groupe)
+                       VALUES (?, ?, ?, ?)""",
+                    (vote_id, decl_id, pos.position, pos.groupe),
+                )
+                stats["positions_inserted"] += 1
+
+            stats["scrutins_fetched"] += 1
+            if (i + 1) % 100 == 0:
+                conn.commit()
+                log.info("votes: %d/%d fetched", i + 1, len(to_fetch))
+            _time.sleep(0.15)
+
+        stats["scrutins_skipped"] = len(existing)
+        conn.commit()
+    return stats
+
+
+def cmd_conflicts(conn: sqlite3.Connection) -> dict[str, int]:
+    """Cross-reference holdings × votes × sectors → conflict_flag rows.
+
+    A flag is emitted when a declarant:
+      1. Holds a company in sector S (via company_sector)
+      2. A vote is tagged sector S with direction D (via vote_sector_tag)
+      3. The declarant voted in the aligned direction:
+         - direction='pro' AND position='pour'  → flagged
+         - direction='anti' AND position='contre' → flagged
+
+    Additionally, if the declarant's spouse works at a company in sector S,
+    the same logic applies with source='spouse'.
+    """
+    cur = conn.cursor()
+    cur.execute("DELETE FROM conflict_flag")
+    stats = {"flags_holding": 0, "flags_spouse": 0}
+
+    # ---- Flags from direct holdings ----
+    # Build {declarant_id: {sector: total_eur}} from holdings × company_sector.
+    decl_sectors: dict[int, dict[str, int]] = {}
+    decl_companies: dict[int, dict[str, list[str]]] = {}  # sector → [company names]
+    for r in cur.execute("""
+        SELECT d.declarant_id, cs.sector, h.company_slug,
+               MIN(h.company_name) AS name,
+               SUM(h.evaluation_eur) AS total
+        FROM holding h
+        JOIN declaration d ON h.declaration_id = d.id
+        JOIN company_sector cs ON cs.company_slug = h.company_slug
+        WHERE h.kind = 'participation_financiere' AND h.evaluation_eur > 0
+        GROUP BY d.declarant_id, cs.sector, h.company_slug
+    """).fetchall():
+        did = r["declarant_id"]
+        sec = r["sector"]
+        decl_sectors.setdefault(did, {})
+        decl_sectors[did][sec] = decl_sectors[did].get(sec, 0) + r["total"]
+        decl_companies.setdefault(did, {}).setdefault(sec, [])
+        if r["name"] and r["name"] not in decl_companies[did][sec]:
+            decl_companies[did][sec].append(r["name"])
+
+    # Walk vote_positions joined with vote_sector_tags.
+    for r in cur.execute("""
+        SELECT vp.declarant_id, vp.vote_id, vp.position,
+               vst.sector, vst.direction,
+               v.titre, v.date
+        FROM vote_position vp
+        JOIN vote_sector_tag vst ON vst.vote_id = vp.vote_id
+        JOIN vote v ON v.id = vp.vote_id
+    """).fetchall():
+        did = r["declarant_id"]
+        sector = r["sector"]
+        direction = r["direction"]
+        position = r["position"]
+        if sector not in decl_sectors.get(did, {}):
+            continue
+        if not _is_aligned(direction, position):
+            continue
+        score = decl_sectors[did][sector]
+        companies = ", ".join(decl_companies.get(did, {}).get(sector, [])[:3])
+        reason = (
+            f"Détient {_fmt_eur(score)} dans {companies} ({sector}). "
+            f"A voté {position} sur «{r['titre'][:80]}…» ({direction}-{sector})."
+        )
+        cur.execute(
+            """INSERT INTO conflict_flag
+               (declarant_id, vote_id, company_slug, sector, score, reason, source)
+               VALUES (?, ?, ?, ?, ?, ?, 'holding')""",
+            (did, r["vote_id"], companies, sector, score, reason),
+        )
+        stats["flags_holding"] += 1
+
+    # ---- Flags from spouse employers ----
+    from parsers.sectors import tag_company
+    for r in cur.execute(
+        "SELECT id, spouse_employers FROM declarant WHERE spouse_employers IS NOT NULL"
+    ).fetchall():
+        employers = json.loads(r["spouse_employers"])
+        spouse_sectors: dict[str, str] = {}  # sector → employer name
+        for emp in employers:
+            from parsers.normalize import company_slug
+            slug = company_slug(emp)
+            for sec in tag_company(slug, emp):
+                spouse_sectors.setdefault(sec, emp)
+        if not spouse_sectors:
+            continue
+        did = r["id"]
+        for vp in cur.execute("""
+            SELECT vp.vote_id, vp.position, vst.sector, vst.direction, v.titre
+            FROM vote_position vp
+            JOIN vote_sector_tag vst ON vst.vote_id = vp.vote_id
+            JOIN vote v ON v.id = vp.vote_id
+            WHERE vp.declarant_id = ?
+        """, (did,)).fetchall():
+            sector = vp["sector"]
+            if sector not in spouse_sectors:
+                continue
+            if not _is_aligned(vp["direction"], vp["position"]):
+                continue
+            emp_name = spouse_sectors[sector]
+            reason = (
+                f"Conjoint(e) travaille chez {emp_name} ({sector}). "
+                f"A voté {vp['position']} sur «{vp['titre'][:80]}…» ({vp['direction']}-{sector})."
+            )
+            cur.execute(
+                """INSERT INTO conflict_flag
+                   (declarant_id, vote_id, company_slug, sector, score, reason, source)
+                   VALUES (?, ?, ?, ?, ?, ?, 'spouse')""",
+                (did, vp["vote_id"], emp_name, sector, 1, reason),
+            )
+            stats["flags_spouse"] += 1
+
+    conn.commit()
+    return stats
+
+
+def _is_aligned(direction: str, position: str) -> bool:
+    return (direction == "pro" and position == "pour") or \
+           (direction == "anti" and position == "contre")
+
+
+def _fmt_eur(n: int) -> str:
+    if n >= 1_000_000:
+        return f"{n / 1_000_000:.1f} M€"
+    if n >= 1_000:
+        return f"{n // 1_000} k€"
+    return f"{n} €"
+
+
 def cmd_changes(conn: sqlite3.Connection) -> dict[str, int]:
     """Recompute ``holding_change`` from scratch.
 
@@ -216,9 +419,10 @@ def _insert_change(cur, declarant_id, company_slug, prev_decl_id, curr_decl_id, 
 def main(argv: list[str]) -> int:
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
-    if len(argv) < 2 or argv[1] not in {"hatvp", "parties", "changes", "all"}:
+    cmds = {"hatvp", "parties", "changes", "votes", "sectors", "conflicts", "all"}
+    if len(argv) < 2 or argv[1] not in cmds:
         print(
-            "usage: sync.py {hatvp <xml> | parties | changes | all <xml>} [--db PATH]",
+            "usage: sync.py {hatvp <xml> | parties | changes | votes | all <xml>} [--db PATH]",
             file=sys.stderr,
         )
         return 2
@@ -244,6 +448,12 @@ def main(argv: list[str]) -> int:
         return _run(cmd_parties, conn)
     if cmd == "changes":
         return _run(cmd_changes, conn)
+    if cmd == "votes":
+        return _run(cmd_votes, conn)
+    if cmd == "sectors":
+        return _run(cmd_sectors, conn)
+    if cmd == "conflicts":
+        return _run(cmd_conflicts, conn)
     if cmd == "all":
         if not args:
             print("usage: sync.py all <path/to/data.xml>", file=sys.stderr)
@@ -254,7 +464,16 @@ def main(argv: list[str]) -> int:
         code = _run(cmd_parties, conn)
         if code:
             return code
-        return _run(cmd_changes, conn)
+        code = _run(cmd_changes, conn)
+        if code:
+            return code
+        code = _run(cmd_votes, conn)
+        if code:
+            return code
+        code = _run(cmd_sectors, conn)
+        if code:
+            return code
+        return _run(cmd_conflicts, conn)
     return 2
 
 
