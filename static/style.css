@@ -206,6 +206,54 @@ a { color: var(--accent); }
     color: #fff;
 }
 
+/* Timeline slider */
+.timeline-row {
+    display: flex;
+    align-items: flex-end;
+    gap: 0.25rem;
+    margin-bottom: 0.15rem;
+}
+
+.timeline-bar {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 1px;
+    height: 36px;
+}
+
+.timeline-tick {
+    flex: 1;
+    min-width: 2px;
+    background: var(--border);
+    border-radius: 2px 2px 0 0;
+    cursor: pointer;
+    transition: background 0.1s;
+}
+
+.timeline-tick:hover { background: var(--muted); }
+.timeline-tick.active { background: var(--accent); }
+
+.timeline-btn {
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    color: var(--muted);
+    cursor: pointer;
+    padding: 0.2rem 0.5rem;
+    font-size: 0.75rem;
+    line-height: 1;
+}
+
+.timeline-btn:hover { color: var(--fg); border-color: var(--muted); }
+
+.timeline-label {
+    text-align: center;
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-family: var(--mono);
+}
+
 table {
     width: 100%;
     border-collapse: collapse;
@@ -244,37 +292,30 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     padding-top: 0.5rem;
 }
 
-/* Composition bar */
-.composition-bar-wrap { position: relative; }
-
-.composition-bar {
+/* Party composition bar (thin proportional segments) */
+.party-bar {
     display: flex;
-    height: 48px;
+    height: 22px;
     border-radius: var(--radius);
     overflow: hidden;
-    gap: 2px;
+    gap: 1px;
+    margin: 0.5rem 0 0.4rem;
 }
 
-.comp-seg {
+.party-bar-seg {
     display: flex;
     align-items: center;
     justify-content: center;
-    cursor: pointer;
-    transition: filter 0.12s;
-    min-width: 2px;
-}
-
-.comp-seg:hover { filter: brightness(1.15); }
-
-.comp-label {
     color: #fff;
+    font-size: 0.7rem;
     font-weight: 700;
-    font-size: 0.82rem;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    text-decoration: none;
+    min-width: 2px;
+    transition: filter 0.12s;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.4);
 }
 
-.members-bar { height: 40px; gap: 1px; }
-.member-seg { transition: opacity 0.12s, filter 0.12s; }
+.party-bar-seg:hover { filter: brightness(1.2); }
 
 .comp-legend {
     display: flex;

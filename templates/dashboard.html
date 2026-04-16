@@ -12,26 +12,31 @@
 
 <div class="selectors">
     <div class="window-selector">
-        <a href="?window=12m&scope={{ scope }}" class="{% if window == '12m' %}active{% endif %}">12 mois</a>
-        <a href="?window=24m&scope={{ scope }}" class="{% if window == '24m' %}active{% endif %}">24 mois</a>
-        <a href="?window=all&scope={{ scope }}" class="{% if window == 'all' %}active{% endif %}">Tout</a>
-    </div>
-    <div class="window-selector">
-        <a href="?window={{ window }}&scope=an" class="{% if scope == 'an' %}active{% endif %}">Députés</a>
-        <a href="?window={{ window }}&scope=senat" class="{% if scope == 'senat' %}active{% endif %}">Sénateurs</a>
-        <a href="?window={{ window }}&scope=parl" class="{% if scope == 'parl' %}active{% endif %}">Les deux</a>
-        <a href="?window={{ window }}&scope=all" class="{% if scope == 'all' %}active{% endif %}">Tous</a>
+        <a href="?scope=an" class="{% if scope == 'an' %}active{% endif %}">Députés</a>
+        <a href="?scope=senat" class="{% if scope == 'senat' %}active{% endif %}">Sénateurs</a>
+        <a href="?scope=parl" class="{% if scope == 'parl' %}active{% endif %}">Les deux</a>
+        <a href="?scope=all" class="{% if scope == 'all' %}active{% endif %}">Tous</a>
     </div>
 </div>
 
+<div class="card" style="margin-bottom:0.75rem">
+    <h2>Période</h2>
+    <div id="timeline"></div>
+</div>
+
 <section class="card" id="hemicycle-section" {% if scope == 'all' %}style="display:none"{% endif %}>
-    <h2><span id="hemicycle-title">Composition de l'Assemblée</span></h2>
+    <h2 id="hemicycle-title">
+        {% if scope == 'senat' %}Composition du Sénat
+        {% elif scope == 'parl' %}Composition du Parlement
+        {% else %}Composition de l'Assemblée nationale{% endif %}
+    </h2>
     <div id="hemicycle-wrap" style="position:relative">
         <svg id="hemicycle"></svg>
         <div id="hemicycle-tooltip" class="tooltip" style="display:none"></div>
     </div>
+    <div id="hemicycle-party-bar"></div>
     <div class="comp-legend" id="hemicycle-legend"></div>
-    <p id="hemicycle-hint" class="lede" style="text-align:center;margin:0.3rem 0 0"><a href="#" id="hemicycle-back" style="display:none">← Retour aux groupes</a></p>
+    <p class="lede" style="text-align:center;margin:0.3rem 0 0;font-size:0.75rem">Placement indicatif par spectre politique (gauche → droite), pas les sièges réels.</p>
 </section>
 
 <div class="grid">
@@ -82,147 +87,87 @@
 (async function () {
     try {
     const esc = pv.escapeHtml;
-    const hSvg = d3.select('#hemicycle');
-    const hTooltip = document.getElementById('hemicycle-tooltip');
-    const hTitle = document.getElementById('hemicycle-title');
-    const hBack = document.getElementById('hemicycle-back');
-    const hLegend = document.getElementById('hemicycle-legend');
-    const hWrap = document.getElementById('hemicycle-wrap');
+    const scope = '{{ scope }}';
+    let chartTop = null, chartStack = null;
 
-    const groups = await pv.fetchJSON('/api/hemicycle/groups?scope={{ scope }}');
-    renderParliament(groups);
-    hBack.addEventListener('click', (e) => { e.preventDefault(); renderParliament(groups); });
+    // --- Load timeline + initial data in parallel ---
+    const [timelineData, initSeats, initGroups, initDash] = await Promise.all([
+        pv.fetchJSON('/api/timeline?scope=' + scope),
+        pv.fetchJSON('/api/hemicycle?scope=' + scope),
+        pv.fetchJSON('/api/hemicycle/groups?scope=' + scope),
+        pv.fetchJSON('/api/dashboard?scope=' + scope),
+    ]);
 
-    function renderParliament(groups) {
-        hSvg.selectAll('*').remove();
-        hTitle.textContent = "Composition de l'Assemblée";
-        hBack.style.display = 'none';
+    // Render timeline; on change, refetch everything for the selected month
+    pv.timeline.render(
+        document.getElementById('timeline'),
+        timelineData,
+        async (month) => {
+            const asof = '&asof=' + month;
+            const [seats, groups, data] = await Promise.all([
+                pv.fetchJSON('/api/hemicycle?scope=' + scope + asof),
+                pv.fetchJSON('/api/hemicycle/groups?scope=' + scope + asof),
+                pv.fetchJSON('/api/dashboard?scope=' + scope + asof),
+            ]);
+            renderHemicycle(seats, groups);
+            renderDashboard(data);
+        },
+    );
 
-        const W = hWrap.clientWidth || 800;
-        const H = Math.min(Math.round(W * 0.28), 280);
-        hSvg.attr('width', W).attr('height', H);
+    // --- Initial render ---
+    renderHemicycle(initSeats, initGroups);
+    renderDashboard(initDash);
 
-        const totalSeats = groups.reduce((s, g) => s + g.n_seats, 0);
-        if (!totalSeats) return;
-
-        const seatData = groups.map(g => ({ seats: g.n_seats, color: g.color }));
-        const seatR = Math.max(3, Math.min(8, W / (totalSeats * 0.7)));
-        const chart = d3.parliamentChart()
-            .width(W)
-            .seatRadius(seatR)
-            .rowHeight(seatR * 3)
-            .sectionGap(seatR * 1.5)
-            .aggregatedData(seatData);
-
-        hSvg.call(chart);
-
-        // Add hover + click per section (group of circles)
-        let seatIdx = 0;
-        const circles = hSvg.selectAll('circle');
-        for (const g of groups) {
-            for (let i = 0; i < g.n_seats; i++) {
-                const node = circles.nodes()[seatIdx];
-                if (node) {
-                    const gRef = g;
-                    d3.select(node)
-                        .style('cursor', 'pointer')
-                        .on('mouseenter', function(e) {
-                            d3.select(this).attr('r', parseFloat(d3.select(this).attr('r')) * 1.5);
-                            hTooltip.innerHTML = `<strong>${esc(gRef.label)}</strong><br>${gRef.n_seats} sièges · ${pv.formatEur(gRef.total_eur)}`;
-                            hTooltip.style.display = 'block';
-                            const rect = hWrap.getBoundingClientRect();
-                            hTooltip.style.left = (e.clientX - rect.left + 12) + 'px';
-                            hTooltip.style.top = (e.clientY - rect.top - 45) + 'px';
-                        })
-                        .on('mouseleave', function() {
-                            d3.select(this).attr('r', chart.seatRadius());
-                            hTooltip.style.display = 'none';
-                        })
-                        .on('click', () => drillDown(gRef.slug, gRef.label, gRef.color));
-                }
-                seatIdx++;
-            }
-        }
-
-        // Legend
-        hLegend.innerHTML = groups
-            .filter(g => g.n_seats > totalSeats * 0.02)
-            .map(g => `<span class="comp-legend-item"><span class="comp-dot" style="background:${g.color}"></span>${esc(g.label)} (${g.n_seats}) <span class="comp-eur">${pv.formatEur(g.total_eur)}</span></span>`)
-            .join('');
+    function renderHemicycle(seats, groups) {
+        pv.hemicycle.render(
+            d3.select('#hemicycle'),
+            document.getElementById('hemicycle-wrap'),
+            seats, groups,
+            document.getElementById('hemicycle-party-bar'),
+            document.getElementById('hemicycle-legend'),
+        );
     }
 
-    async function drillDown(slug, label, color) {
-        hTitle.textContent = label + ' — membres individuels';
-        hBack.style.display = 'inline';
-        hLegend.innerHTML = '';
-        const seats = await pv.fetchJSON('/api/hemicycle?scope={{ scope }}&party=' + slug);
-        if (!seats.length) { hSvg.selectAll('*').remove(); return; }
-
-        seats.sort((a, b) => b.total - a.total);
-        const W = hWrap.clientWidth || 800;
-        const H = Math.round(W * 0.38);
-        hSvg.selectAll('*').remove();
-        hSvg.attr('width', W).attr('height', H);
-
-        const n = seats.length;
-        const seatR = Math.max(4, Math.min(10, W / (n * 0.7)));
-        const seatData = seats.map(() => ({ seats: 1, color }));
-        const chart = d3.parliamentChart()
-            .width(W)
-            .seatRadius(seatR)
-            .rowHeight(seatR * 3)
-            .sectionGap(0)
-            .aggregatedData(seatData);
-        hSvg.call(chart);
-
-        const maxHolding = Math.max(...seats.map(s => s.total), 1);
-        const circles = hSvg.selectAll('circle');
-        circles.each(function(d, i) {
-            if (i >= seats.length) return;
-            const s = seats[i];
-            const op = 0.3 + 0.7 * Math.min(s.total / (maxHolding * 0.3), 1);
-            d3.select(this)
-                .attr('opacity', op)
-                .style('cursor', 'pointer')
-                .on('mouseenter', function(e) {
-                    d3.select(this).attr('opacity', 1).attr('r', chart.seatRadius() * 1.5);
-                    hTooltip.innerHTML = `<strong>${esc(s.prenom)} ${esc(s.nom)}</strong><br>${pv.formatEur(s.total)}`;
-                    hTooltip.style.display = 'block';
-                    const rect = hWrap.getBoundingClientRect();
-                    hTooltip.style.left = (e.clientX - rect.left + 12) + 'px';
-                    hTooltip.style.top = (e.clientY - rect.top - 45) + 'px';
-                })
-                .on('mouseleave', function() {
-                    d3.select(this).attr('opacity', op).attr('r', chart.seatRadius());
-                    hTooltip.style.display = 'none';
-                })
-                .on('click', () => { window.location = '/declarant/' + s.id; });
+    function renderDashboard(data) {
+        // --- Top companies bar chart ---
+        const top = data.top_companies;
+        if (chartTop) chartTop.destroy();
+        chartTop = pv.barChart(document.getElementById('chart-top'), {
+            labels: top.map(c => c.name),
+            data: top.map(c => c.total),
+            onBarClick: (i) => { window.location = '/company/' + top[i].slug; },
         });
+
+        // --- Stacked bar by party ---
+        const tbp = data.top_by_party;
+        if (chartStack) chartStack.destroy();
+        chartStack = pv.stackedBarChart(document.getElementById('chart-stack'), {
+            labels: tbp.companies.map(c => c.name),
+            datasets: tbp.parties.map((p, pi) => ({
+                label: p.label,
+                backgroundColor: p.color,
+                data: tbp.matrix.map(row => row[pi]),
+            })),
+            onBarClick: (i) => { window.location = '/company/' + tbp.companies[i].slug; },
+        });
+
+        // --- Surge tables ---
+        renderSurgeTable('table-new', data.surges_new);
+        renderSurgeTable('table-grown', data.surges_grown);
+
+        // --- Conflicts ---
+        const conflicts = data.top_conflicted;
+        if (pv.fillTable('table-conflicts', conflicts, 5)) {
+            document.querySelector('#table-conflicts tbody').innerHTML = conflicts.map(r => `
+                <tr>
+                    <td><a href="/declarant/${r.id}">${esc(r.prenom)} ${esc(r.nom)}</a></td>
+                    <td><span class="party-pill" style="background:${r.party_color}">${esc(r.party_label)}</span></td>
+                    <td class="num">${r.n_votes}</td>
+                    <td class="num">${pv.formatEur(r.holding_eur)}</td>
+                    <td class="num">${r.n_spouse_flags || '—'}</td>
+                </tr>`).join('');
+        }
     }
-
-    // --- Dashboard data ---
-    const data = await pv.fetchJSON('/api/dashboard?window={{ window }}&scope={{ scope }}');
-
-    const top = data.top_companies;
-    pv.barChart(document.getElementById('chart-top'), {
-        labels: top.map(c => c.name),
-        data: top.map(c => c.total),
-        onBarClick: (i) => { window.location = '/company/' + top[i].slug; },
-    });
-
-    const tbp = data.top_by_party;
-    pv.stackedBarChart(document.getElementById('chart-stack'), {
-        labels: tbp.companies.map(c => c.name),
-        datasets: tbp.parties.map((p, pi) => ({
-            label: p.label,
-            backgroundColor: p.color,
-            data: tbp.matrix.map(row => row[pi]),
-        })),
-        onBarClick: (i) => { window.location = '/company/' + tbp.companies[i].slug; },
-    });
-
-    renderSurgeTable('table-new', data.surges_new);
-    renderSurgeTable('table-grown', data.surges_grown);
 
     function renderSurgeTable(id, rows) {
         if (!pv.fillTable(id, rows, 3)) return;
@@ -231,18 +176,6 @@
                 <td><a href="/company/${r.slug}">${esc(r.name)}</a></td>
                 <td class="num">${r.n_people}</td>
                 <td class="num">${pv.formatEur(r.total)}</td>
-            </tr>`).join('');
-    }
-
-    const conflicts = data.top_conflicted;
-    if (pv.fillTable('table-conflicts', conflicts, 5)) {
-        document.querySelector('#table-conflicts tbody').innerHTML = conflicts.map(r => `
-            <tr>
-                <td><a href="/declarant/${r.id}">${esc(r.prenom)} ${esc(r.nom)}</a></td>
-                <td><span class="party-pill" style="background:${r.party_color}">${esc(r.party_label)}</span></td>
-                <td class="num">${r.n_votes}</td>
-                <td class="num">${pv.formatEur(r.holding_eur)}</td>
-                <td class="num">${r.n_spouse_flags || '—'}</td>
             </tr>`).join('');
     }
 
