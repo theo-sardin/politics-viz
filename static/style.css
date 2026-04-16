@@ -196,6 +196,26 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     padding-top: 0.5rem;
 }
 
+/* Hemicycle */
+.hemicycle-card {
+    margin-bottom: 0.75rem;
+    position: relative;
+}
+
+.tooltip {
+    position: absolute;
+    background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.4rem 0.6rem;
+    font-size: 0.82rem;
+    line-height: 1.4;
+    pointer-events: none;
+    z-index: 10;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+    white-space: nowrap;
+}
+
 /* Conflict card styling */
 .conflict-card { border-left: 3px solid #e74c3c; }
 

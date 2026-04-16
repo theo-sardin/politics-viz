@@ -24,6 +24,12 @@
     </div>
 </div>
 
+<section class="card hemicycle-card">
+    <h2>Hemicycle — holdings by seat</h2>
+    <div id="hemicycle"></div>
+    <div id="hemicycle-tooltip" class="tooltip" style="display:none"></div>
+</section>
+
 <div class="grid">
     <section class="card">
         <h2>Top 10 companies (≥2 holders)</h2>
@@ -71,6 +77,11 @@
 <script>
 (async function () {
     const esc = pv.escapeHtml;
+
+    // Hemicycle
+    const seats = await pv.fetchJSON('/api/hemicycle?scope={{ scope }}');
+    renderHemicycle(seats);
+
     const data = await pv.fetchJSON('/api/dashboard?window={{ window }}&scope={{ scope }}');
 
     // Card 1: top companies bar
@@ -106,6 +117,83 @@
                 <td class="num">${r.n_people}</td>
                 <td class="num">${pv.formatEur(r.total)}</td>
             </tr>`).join('');
+    }
+
+    function renderHemicycle(seats) {
+        const container = document.getElementById('hemicycle');
+        const tooltip = document.getElementById('hemicycle-tooltip');
+        const W = container.clientWidth || 800;
+        const H = Math.min(W * 0.45, 320);
+        const cx = W / 2, cy = H * 0.92;
+
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+        svg.setAttribute('width', W);
+        svg.setAttribute('height', H);
+        svg.style.display = 'block';
+
+        const n = seats.length;
+        if (n === 0) { container.textContent = 'No seats.'; return; }
+
+        // Distribute seats across concentric semicircular rows.
+        const rows = [];
+        const nRows = Math.max(6, Math.min(14, Math.ceil(n / 40)));
+        const rMin = H * 0.18, rMax = H * 0.88;
+        let remaining = n;
+        for (let i = 0; i < nRows; i++) {
+            const r = rMin + (rMax - rMin) * i / (nRows - 1);
+            const capacity = Math.floor(Math.PI * r / ((rMax - rMin) / nRows * 0.9));
+            const count = (i < nRows - 1) ? Math.min(capacity, Math.ceil(remaining / (nRows - i))) : remaining;
+            rows.push({ r, count });
+            remaining -= count;
+        }
+
+        // Max holdings for sizing.
+        const maxLog = Math.log1p(Math.max(...seats.map(s => s.total), 1));
+
+        let seatIdx = 0;
+        for (const { r, count } of rows) {
+            for (let j = 0; j < count && seatIdx < n; j++) {
+                const angle = Math.PI * (0.05 + 0.9 * j / Math.max(count - 1, 1));
+                const x = cx - r * Math.cos(angle);
+                const y = cy - r * Math.sin(angle);
+                const s = seats[seatIdx];
+                const baseR = (rMax - rMin) / nRows * 0.32;
+                const sizeR = baseR * (0.5 + 0.5 * Math.log1p(s.total) / maxLog);
+
+                const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+                circle.setAttribute('cx', x);
+                circle.setAttribute('cy', y);
+                circle.setAttribute('r', sizeR);
+                circle.setAttribute('fill', s.party_color);
+                circle.setAttribute('opacity', '0.85');
+                circle.style.cursor = 'pointer';
+                circle.style.transition = 'r 0.15s, opacity 0.15s';
+
+                circle.addEventListener('mouseenter', (e) => {
+                    circle.setAttribute('opacity', '1');
+                    circle.setAttribute('r', sizeR * 1.6);
+                    tooltip.innerHTML = `<strong>${esc(s.prenom)} ${esc(s.nom)}</strong><br>` +
+                        `<span class="party-pill" style="background:${s.party_color};font-size:0.65rem">${esc(s.party_label)}</span> ` +
+                        `${pv.formatEur(s.total)}`;
+                    tooltip.style.display = 'block';
+                    const rect = container.getBoundingClientRect();
+                    tooltip.style.left = (e.clientX - rect.left + 10) + 'px';
+                    tooltip.style.top = (e.clientY - rect.top - 40) + 'px';
+                });
+                circle.addEventListener('mouseleave', () => {
+                    circle.setAttribute('opacity', '0.85');
+                    circle.setAttribute('r', sizeR);
+                    tooltip.style.display = 'none';
+                });
+                circle.addEventListener('click', () => {
+                    window.location = '/declarant/' + s.id;
+                });
+                svg.appendChild(circle);
+                seatIdx++;
+            }
+        }
+        container.appendChild(svg);
     }
 
     // Card 5: conflicts

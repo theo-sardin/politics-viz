@@ -182,6 +182,14 @@ def api_party(
     )
 
 
+@app.get("/api/hemicycle")
+def api_hemicycle(
+    scope: str = Query("an"), conn: sqlite3.Connection = Depends(get_conn)
+) -> JSONResponse:
+    scope = _validate_scope(scope)
+    return JSONResponse(queries.hemicycle(conn, scope=scope))
+
+
 @app.get("/api/dashboard")
 def api_dashboard(
     window: str = Query("all"),

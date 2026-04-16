@@ -471,6 +471,50 @@ def declarant_conflicts(conn: sqlite3.Connection, declarant_id: int) -> list[dic
     return [dict(r) for r in rows]
 
 
+def hemicycle(conn: sqlite3.Connection, scope: Scope = "an") -> list[dict]:
+    """All declarants in scope with party + total holdings, for the hemicycle.
+
+    Sorted by political spectrum (left → right) for realistic seating.
+    """
+    rows = conn.execute(
+        f"""
+        SELECT de.id, de.nom, de.prenom,
+               COALESCE(p.slug, 'none')    AS party_slug,
+               COALESCE(p.label, 'Non affilié') AS party_label,
+               COALESCE(p.color, '#999999') AS party_color,
+               COALESCE(SUM(h.evaluation_eur), 0) AS total
+        FROM declarant de
+        LEFT JOIN party p ON de.party_id = p.id
+        LEFT JOIN declaration d ON d.declarant_id = de.id AND {scope_clause(scope)}
+        LEFT JOIN holding h ON h.declaration_id = d.id
+             AND h.kind = 'participation_financiere'
+        WHERE EXISTS (
+            SELECT 1 FROM declaration dd
+            WHERE dd.declarant_id = de.id AND {scope_clause(scope)}
+        )
+        GROUP BY de.id
+        ORDER BY
+            CASE COALESCE(p.slug, 'none')
+                WHEN 'lfi' THEN 1
+                WHEN 'pcf' THEN 2
+                WHEN 'eelv' THEN 3
+                WHEN 'ps' THEN 4
+                WHEN 'liot' THEN 5
+                WHEN 'renaissance' THEN 6
+                WHEN 'modem' THEN 7
+                WHEN 'horizons' THEN 8
+                WHEN 'udi' THEN 9
+                WHEN 'lr' THEN 10
+                WHEN 'rn' THEN 11
+                WHEN 'rec' THEN 12
+                ELSE 6
+            END,
+            de.nom
+        """,
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def declarant_vote_count(conn: sqlite3.Connection, declarant_id: int) -> int:
     """Total votes cast by this declarant."""
     row = conn.execute(
