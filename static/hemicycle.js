@@ -6,22 +6,16 @@ window.pv = window.pv || {};
 pv.hemicycle = (function () {
     const esc = pv.escapeHtml;
 
-    // ---- Layout computation ------------------------------------------------
+    // ---- Layout helpers ----------------------------------------------------
 
-    /** How many concentric rows for N seats (empirically tuned). */
     function rowCount(nSeats) {
         return Math.max(8, Math.min(20, Math.round(Math.sqrt(nSeats / 2.5))));
     }
 
-    /**
-     * Distribute N seats across rows proportionally to each row's arc length.
-     * Returns an array of integers that sum exactly to nSeats.
-     */
-    function distributeSeats(nSeats, nRows, rowRadii) {
+    /** Distribute N items across rows proportionally to arc length. */
+    function distributeToRows(nSeats, nRows, rowRadii) {
         const totalArc = rowRadii.reduce((a, b) => a + b, 0);
         const perRow = rowRadii.map(r => Math.max(1, Math.round(nSeats * r / totalArc)));
-
-        // Fix rounding drift so the total matches exactly
         let diff = nSeats - perRow.reduce((a, b) => a + b, 0);
         let idx = diff > 0 ? nRows - 1 : 0;
         while (diff !== 0) {
@@ -32,90 +26,94 @@ pv.hemicycle = (function () {
         return perRow;
     }
 
+    /** Largest-remainder apportionment of `total` across groups. */
+    function apportion(groupSizes, total) {
+        const grand = groupSizes.reduce((a, b) => a + b, 0);
+        if (grand === 0) return groupSizes.map(() => 0);
+        const ideals = groupSizes.map(s => s / grand * total);
+        const floors = ideals.map(Math.floor);
+        let rem = total - floors.reduce((a, b) => a + b, 0);
+        const order = ideals.map((v, i) => ({ i, r: v - floors[i] })).sort((a, b) => b.r - a.r);
+        for (let k = 0; k < rem; k++) floors[order[k].i]++;
+        return floors;
+    }
+
+    // ---- Core layout -------------------------------------------------------
+
     /**
-     * Generate {x, y} positions for every seat.
+     * Build positioned seats for the hemicycle.
      *
-     * Seats sit on concentric semicircular arcs (angle π = left, 0 = right).
-     * Positions are sorted by their fractional position along the arc (0 = left
-     * edge, 1 = right edge) so that seats at the same "radial column" across
-     * different rows are adjacent.  This produces clean radial alignment — party
-     * boundaries form straight lines radiating from the centre rather than
-     * zigzagging between rows.
-     *
-     * NOTE: positions are representative (political spectrum left→right),
-     * not actual assigned seat numbers — that data isn't in our sources.
-     *
-     * @returns {{ positions: Array, height: number, seatRadius: number }}
+     * Party boundary angles are fixed globally (based on total seat fractions)
+     * so they form perfectly straight radial lines across all rows.  Within
+     * each party's angular wedge, that row's seats are evenly spaced.
      */
-    function computePositions(nSeats, containerWidth) {
+    function computePositions(seats, containerWidth) {
+        const N = seats.length;
         const halfW = containerWidth / 2;
-        const nRows = rowCount(nSeats);
+        const nRows = rowCount(N);
 
-        // Fraction of halfW for inner / outer radii
-        const innerR = 0.35;
-        const outerR = 0.95;
+        const innerR = 0.35, outerR = 0.95;
         const rowStep = (outerR - innerR) / nRows;
-
-        // Centre of each row (as fraction of scale)
         const rowRadii = [];
         for (let i = 0; i < nRows; i++) rowRadii.push(innerR + (i + 0.5) * rowStep);
 
-        const seatsPerRow = distributeSeats(nSeats, nRows, rowRadii);
+        const seatsPerRow = distributeToRows(N, nRows, rowRadii);
 
-        // Cap pixel height so the hemicycle stays compact
         const maxH = Math.min(halfW * 0.85, 400);
         const scale = maxH / outerR;
-
-        // Angular padding — avoid seats exactly at the horizontal edges
-        const aPad = 0.06;
-        const aMin = aPad;
-        const aMax = Math.PI - aPad;
-
-        const topMargin = 10;
-        const botMargin = 5;
+        const aPad = 0.06, aMin = aPad, aMax = Math.PI - aPad;
+        const aRange = aMax - aMin;
+        const topMargin = 10, botMargin = 5;
         const svgH = maxH + topMargin + botMargin;
-        const cy = svgH - botMargin;   // vertical centre of the arcs
+        const cy = svgH - botMargin;
 
-        // Each row spaces its own seats evenly along the arc (clean arcs).
-        // A virtual column index determines fill order so that parties form
-        // wedge-shaped sectors instead of horizontal bands.
-        const maxSeats = Math.max(...seatsPerRow);
-
+        // Identify party groups in the pre-sorted seat list.
+        const groups = [];
+        let gStart = 0;
+        for (let i = 1; i <= N; i++) {
+            if (i === N || seats[i].party_slug !== seats[gStart].party_slug) {
+                groups.push({ start: gStart, count: i - gStart });
+                gStart = i;
+            }
+        }
+        const groupSizes = groups.map(g => g.count);
+        const groupUsed = groups.map(() => 0);
         const positions = [];
+
         for (let row = 0; row < nRows; row++) {
             const r = rowRadii[row] * scale;
             const n = seatsPerRow[row];
+
+            // Decide which deputies sit in this row (proportional per party)
+            const rowAlloc = apportion(groupSizes, n);
+            const rowSeats = [];
+            for (let gi = 0; gi < groups.length; gi++) {
+                for (let k = 0; k < rowAlloc[gi]; k++) {
+                    rowSeats.push(seats[groups[gi].start + groupUsed[gi]++]);
+                }
+            }
+
+            // Place ALL seats evenly along the full arc (clean arcs).
+            // Party boundaries emerge from the proportional allocation —
+            // no angular wedges needed.
             for (let j = 0; j < n; j++) {
                 const frac = j / Math.max(n - 1, 1);
-                // Position: row's own even spacing (clean arcs)
-                const angle = aMax - frac * (aMax - aMin);
-                // Column: virtual index for sort order only (clean wedges)
-                const col = Math.round(frac * (maxSeats - 1));
+                const angle = aMax - frac * aRange;
                 positions.push({
                     x: halfW + r * Math.cos(angle),
                     y: cy - r * Math.sin(angle),
-                    col,
-                    row,
+                    seat: rowSeats[j],
                 });
             }
         }
 
-        // Sort by column (left→right), then by row (inner→outer).
-        // This determines which deputy sits where — parties form wedges.
-        positions.sort((a, b) => a.col - b.col || a.row - b.row);
-
         const seatRadius = Math.max(2.5, Math.min(6, scale * rowStep * 0.4));
-
         return { positions, height: svgH, seatRadius };
     }
 
     // ---- DOM rendering -----------------------------------------------------
 
-    /** Draw one circle per seat on the SVG, with tooltip + click behaviour. */
-    function drawSeats(svg, positions, seats, seatR, wrapEl, tooltip) {
-        // Pair each position with its seat data
-        positions.forEach((p, i) => { p.seat = seats[i]; });
-
+    function drawSeats(svg, positions, seatR, wrapEl, tooltip) {
         svg.selectAll('circle')
             .data(positions)
             .enter()
@@ -150,7 +148,6 @@ pv.hemicycle = (function () {
         tooltip.style.top  = (event.clientY - rect.top  - 55) + 'px';
     }
 
-    /** Thin proportional bar showing seat counts per party. */
     function renderPartyBar(container, groups) {
         const total = groups.reduce((s, g) => s + g.n_seats, 0);
         container.innerHTML = '<div class="party-bar">' + groups.map(g => {
@@ -162,7 +159,6 @@ pv.hemicycle = (function () {
         }).join('') + '</div>';
     }
 
-    /** Legend row: coloured dot + party name + seat count, one per party. */
     function renderLegend(container, groups) {
         container.innerHTML = groups.map(g =>
             `<a href="/party/${g.slug}" class="comp-legend-item" style="text-decoration:none;color:inherit">`
@@ -173,27 +169,17 @@ pv.hemicycle = (function () {
 
     // ---- Public API --------------------------------------------------------
 
-    /**
-     * Render the full hemicycle visualisation.
-     *
-     * @param {d3.Selection} svg       - D3 selection of the <svg> element
-     * @param {HTMLElement}  wrapEl    - wrapper div (for tooltip positioning)
-     * @param {Array}        seats     - per-deputy objects, pre-sorted left→right
-     * @param {Array}        groups    - per-party aggregates (slug, label, color, n_seats)
-     * @param {HTMLElement}  barEl     - container for the party bar
-     * @param {HTMLElement}  legendEl  - container for the legend
-     */
     function render(svg, wrapEl, seats, groups, barEl, legendEl) {
         svg.selectAll('*').remove();
         if (!seats.length) return;
 
         const W = wrapEl.clientWidth || 800;
-        const { positions, height, seatRadius } = computePositions(seats.length, W);
+        const { positions, height, seatRadius } = computePositions(seats, W);
 
         svg.attr('width', W).attr('height', height).attr('viewBox', `0 0 ${W} ${height}`);
 
         const tooltip = wrapEl.querySelector('.tooltip');
-        drawSeats(svg, positions, seats, seatRadius, wrapEl, tooltip);
+        drawSeats(svg, positions, seatRadius, wrapEl, tooltip);
 
         renderPartyBar(barEl, groups);
         renderLegend(legendEl, groups);
