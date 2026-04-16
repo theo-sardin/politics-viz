@@ -10,6 +10,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Literal
 
+from parsers.normalize import display_name
+
 Window = Literal["12m", "24m", "all"]
 Scope = Literal["an", "senat", "parl", "all"]
 
@@ -25,6 +27,14 @@ _SCOPE_CLAUSES: dict[str, str] = {
     "parl":  "d.mandate_type IN ('Député', 'Sénateur')",
     "all":   "1=1",
 }
+
+
+def _prettify(rows: list[dict]) -> list[dict]:
+    """Apply display_name to rows that have slug + name columns."""
+    for r in rows:
+        if "slug" in r and "name" in r:
+            r["name"] = display_name(r["slug"], r.get("name"))
+    return rows
 
 
 def scope_clause(scope: Scope) -> str:
@@ -81,7 +91,7 @@ def top_companies(
         """,
         (start, min_holders, limit),
     ).fetchall()
-    return [dict(r) for r in rows]
+    return _prettify([dict(r) for r in rows])
 
 
 def top_companies_by_party(
@@ -196,7 +206,7 @@ def declarant_changes(conn: sqlite3.Connection, declarant_id: int) -> list[dict]
            ORDER BY d.date_depot DESC""",
         (declarant_id,),
     ).fetchall()
-    return [dict(r) for r in rows]
+    return _prettify([dict(r) for r in rows])
 
 
 def get_company(conn: sqlite3.Connection, slug: str) -> dict | None:
@@ -211,7 +221,11 @@ def get_company(conn: sqlite3.Connection, slug: str) -> dict | None:
            GROUP BY company_slug""",
         (slug,),
     ).fetchone()
-    return dict(row) if row else None
+    if not row:
+        return None
+    d = dict(row)
+    d["name"] = display_name(d["slug"], d.get("name"))
+    return d
 
 
 def company_holders(conn: sqlite3.Connection, slug: str) -> list[dict]:
@@ -320,7 +334,7 @@ def party_top_companies(
         """,
         (slug, start, limit),
     ).fetchall()
-    return [dict(r) for r in rows]
+    return _prettify([dict(r) for r in rows])
 
 
 def party_members(conn: sqlite3.Connection, slug: str) -> list[dict]:
@@ -367,7 +381,7 @@ def party_surges(
         """,
         (slug, start, limit),
     ).fetchall()
-    return [dict(r) for r in rows]
+    return _prettify([dict(r) for r in rows])
 
 
 def surges(
@@ -403,4 +417,4 @@ def surges(
         """,
         (change_type, start, limit),
     ).fetchall()
-    return [dict(r) for r in rows]
+    return _prettify([dict(r) for r in rows])
