@@ -99,5 +99,48 @@ def test_unknown_routes_return_404(client):
     assert client.get("/declarant/999999").status_code == 404
 
 
+def test_hemicycle_api(client):
+    r = client.get("/api/hemicycle?scope=an")
+    assert r.status_code == 200
+    seats = r.json()
+    assert isinstance(seats, list)
+    assert len(seats) >= 1
+    seat = seats[0]
+    for key in ("id", "nom", "prenom", "party_slug", "party_color", "total"):
+        assert key in seat
+
+
+def test_hemicycle_all_scope(client):
+    r = client.get("/api/hemicycle?scope=all")
+    assert r.status_code == 200
+    assert len(r.json()) >= 1
+
+
+def test_dashboard_has_hemicycle(client):
+    r = client.get("/")
+    assert r.status_code == 200
+    assert "hemicycle" in r.text.lower()
+
+
+def test_dashboard_has_conflict_card(client):
+    r = client.get("/")
+    assert "Potential conflicts" in r.text
+
+
+def test_dashboard_api_has_top_conflicted(client):
+    r = client.get("/api/dashboard?window=all&scope=an")
+    assert r.status_code == 200
+    j = r.json()
+    assert "top_conflicted" in j
+    assert isinstance(j["top_conflicted"], list)
+
+
+def test_scope_selector_values(client):
+    for scope in ("an", "senat", "parl", "all"):
+        r = client.get(f"/?scope={scope}&window=all")
+        assert r.status_code == 200
+    assert client.get("/?scope=bogus").status_code == 400
+
+
 def test_bad_window_is_400(client):
     assert client.get("/api/dashboard?window=bogus").status_code == 400
