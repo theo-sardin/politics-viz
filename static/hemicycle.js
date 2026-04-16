@@ -76,9 +76,9 @@ pv.hemicycle = (function () {
         const svgH = maxH + topMargin + botMargin;
         const cy = svgH - botMargin;   // vertical centre of the arcs
 
-        // Use the outermost row's seat count as the column grid.  Each seat
-        // in a smaller row snaps to the nearest column so that dots across
-        // rows share the same angle — producing clean radial alignment.
+        // Each row spaces its own seats evenly along the arc (clean arcs).
+        // A virtual column index determines fill order so that parties form
+        // wedge-shaped sectors instead of horizontal bands.
         const maxSeats = Math.max(...seatsPerRow);
 
         const positions = [];
@@ -87,20 +87,21 @@ pv.hemicycle = (function () {
             const n = seatsPerRow[row];
             for (let j = 0; j < n; j++) {
                 const frac = j / Math.max(n - 1, 1);
-                // Snap to a discrete column in the maxSeats grid
+                // Position: row's own even spacing (clean arcs)
+                const angle = aMax - frac * (aMax - aMin);
+                // Column: virtual index for sort order only (clean wedges)
                 const col = Math.round(frac * (maxSeats - 1));
-                // Compute angle from the column, not from the row's own spacing
-                const colAngle = aMax - (col / Math.max(maxSeats - 1, 1)) * (aMax - aMin);
                 positions.push({
-                    x: halfW + r * Math.cos(colAngle),
-                    y: cy - r * Math.sin(colAngle),
+                    x: halfW + r * Math.cos(angle),
+                    y: cy - r * Math.sin(angle),
                     col,
                     row,
                 });
             }
         }
 
-        // Sort by column (left→right), then by row (inner→outer)
+        // Sort by column (left→right), then by row (inner→outer).
+        // This determines which deputy sits where — parties form wedges.
         positions.sort((a, b) => a.col - b.col || a.row - b.row);
 
         const seatRadius = Math.max(2.5, Math.min(6, scale * rowStep * 0.4));

@@ -107,6 +107,7 @@ def declarant_page(
             "declarations": queries.declarant_declarations(conn, declarant_id),
             "changes": queries.declarant_changes(conn, declarant_id),
             "vote_count": queries.declarant_vote_count(conn, declarant_id),
+            "votes": queries.declarant_votes(conn, declarant_id),
         },
     )
 

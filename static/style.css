@@ -328,7 +328,6 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
 
 .comp-legend-item { display: inline-flex; align-items: center; gap: 0.3rem; }
 .comp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.comp-eur { font-weight: 600; color: var(--fg); }
 
 .tooltip {
     position: absolute;
@@ -351,6 +350,19 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     margin: 0 0 0.5rem;
     line-height: 1.4;
 }
+
+/* Vote position badges */
+.vote-pour, .vote-contre, .vote-abst {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #fff;
+}
+.vote-pour { background: #27ae60; }
+.vote-contre { background: #e74c3c; }
+.vote-abst { background: var(--muted); }
 
 /* Empty-state text for tables with no data. */
 td.empty {

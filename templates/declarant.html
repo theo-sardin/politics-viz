@@ -7,11 +7,36 @@
     {% if decl.party_slug %}
         <a href="/party/{{ decl.party_slug }}" class="party-pill" style="background: {{ decl.party_color }}; text-decoration: none;">{{ decl.party_label }}</a>
     {% else %}
-        <span class="party-pill" style="background: #999">Non affilié / Local</span>
+        <span class="party-pill" style="background: #999">Non inscrit</span>
     {% endif %}
     {% if decl.date_naissance %} · né(e) {{ decl.date_naissance }}{% endif %}
     {% if vote_count %} · {{ vote_count }} votes exprimés{% endif %}
 </p>
+
+{% if votes %}
+<section class="card" style="margin-bottom: 1rem">
+    <h2>Derniers votes ({{ vote_count }} au total)</h2>
+    <div class="scroll">
+    <table>
+        <thead><tr><th>Date</th><th>Position</th><th>Scrutin</th><th>Résultat</th></tr></thead>
+        <tbody>
+        {% for v in votes %}
+            <tr>
+                <td style="white-space:nowrap">{{ v.date }}</td>
+                <td>
+                    {% if v.position == 'pour' %}<span class="vote-pour">Pour</span>
+                    {% elif v.position == 'contre' %}<span class="vote-contre">Contre</span>
+                    {% else %}<span class="vote-abst">Abstention</span>{% endif %}
+                </td>
+                <td>{{ v.titre[:120] }}{% if v.titre | length > 120 %}…{% endif %}</td>
+                <td style="white-space:nowrap">{{ v.sort or '—' }} <span style="color:var(--muted);font-size:0.8rem">({{ v.n_pour }}/{{ v.n_contre }}/{{ v.n_abstention }})</span></td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+</section>
+{% endif %}
 
 {% if changes %}
 <section class="card" style="margin-bottom: 1rem">
@@ -32,7 +57,8 @@
 </section>
 {% endif %}
 
-<h2>Déclarations ({{ declarations | length }})</h2>
+{% if declarations %}
+<h2>Déclarations HATVP ({{ declarations | length }})</h2>
 {% for d in declarations %}
 <section class="card" style="margin-bottom: 1rem">
     <h2>{{ d.date_depot[:10] }} — {{ d.mandate_cat or '—' }} / {{ d.organe_label or '—' }}</h2>
@@ -59,4 +85,5 @@
     {% endif %}
 </section>
 {% endfor %}
+{% endif %}
 {% endblock %}
