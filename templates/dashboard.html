@@ -66,19 +66,6 @@
             </table>
         </div>
     </section>
-    <section class="card conflict-card" style="grid-column: 1 / -1">
-        <h2>⚠ Conflits d'intérêts potentiels</h2>
-        <p class="disclaimer">Les signalements sont des co-occurrences mécaniques entre les participations déclarées (ou employeurs du conjoint) et les votes liés à un secteur. Ils indiquent des conflits potentiels, pas des fautes.</p>
-        <table id="table-conflicts">
-            <thead><tr>
-                <th>Nom</th><th>Parti</th>
-                <th class="num">Votes signalés</th>
-                <th class="num">€ dans secteurs signalés</th>
-                <th class="num">Signalements conjoint</th>
-            </tr></thead>
-            <tbody></tbody>
-        </table>
-    </section>
 </div>
 {% endblock %}
 
@@ -151,18 +138,6 @@
         renderSurgeTable('table-new', data.surges_new);
         renderSurgeTable('table-grown', data.surges_grown);
 
-        // --- Conflicts ---
-        const conflicts = data.top_conflicted;
-        if (pv.fillTable('table-conflicts', conflicts, 5)) {
-            document.querySelector('#table-conflicts tbody').innerHTML = conflicts.map(r => `
-                <tr>
-                    <td><a href="/declarant/${r.id}">${esc(r.prenom)} ${esc(r.nom)}</a></td>
-                    <td><span class="party-pill" style="background:${r.party_color}">${esc(r.party_label)}</span></td>
-                    <td class="num">${r.n_votes}</td>
-                    <td class="num">${pv.formatEur(r.holding_eur)}</td>
-                    <td class="num">${r.n_spouse_flags || '—'}</td>
-                </tr>`).join('');
-        }
     }
 
     function renderSurgeTable(id, rows) {

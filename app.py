@@ -106,7 +106,6 @@ def declarant_page(
             "decl": decl,
             "declarations": queries.declarant_declarations(conn, declarant_id),
             "changes": queries.declarant_changes(conn, declarant_id),
-            "conflicts": queries.declarant_conflicts(conn, declarant_id),
             "vote_count": queries.declarant_vote_count(conn, declarant_id),
         },
     )
@@ -237,7 +236,6 @@ def api_dashboard(
             "top_by_party": queries.top_companies_by_party(conn, scope=scope, asof=asof),
             "surges_new": queries.surges(conn, "new", scope=scope, asof=asof),
             "surges_grown": queries.surges(conn, "grown", scope=scope, asof=asof),
-            "top_conflicted": queries.top_conflicted(conn, scope=scope),
         }
     )
 

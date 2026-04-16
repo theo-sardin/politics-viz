@@ -13,29 +13,6 @@
     {% if vote_count %} · {{ vote_count }} votes exprimés{% endif %}
 </p>
 
-{% if conflicts %}
-<section class="card conflict-card" style="margin-bottom: 1rem">
-    <h2>⚠ Conflits potentiels ({{ conflicts | length }} signalements)</h2>
-    <p class="disclaimer">Co-occurrences mécaniques entre participations/emploi du conjoint et votes liés à un secteur. Pas des accusations.</p>
-    <table>
-        <thead><tr><th>Date</th><th>Secteur</th><th>Source</th><th>Motif</th></tr></thead>
-        <tbody>
-        {% for c in conflicts[:20] %}
-            <tr class="flag-row">
-                <td>{{ c.date[:10] }}</td>
-                <td><span class="sector-pill">{{ c.sector }}</span></td>
-                <td>{{ c.source }}</td>
-                <td class="flag-reason">{{ c.reason }}</td>
-            </tr>
-        {% endfor %}
-        {% if conflicts | length > 20 %}
-            <tr><td colspan="4" class="empty">… et {{ conflicts | length - 20 }} signalements supplémentaires.</td></tr>
-        {% endif %}
-        </tbody>
-    </table>
-</section>
-{% endif %}
-
 {% if changes %}
 <section class="card" style="margin-bottom: 1rem">
     <h2>Historique des changements ({{ changes | length }})</h2>

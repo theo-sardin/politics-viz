@@ -134,17 +134,6 @@ def test_dashboard_has_hemicycle(client):
     assert "hemicycle" in r.text.lower() or "composition" in r.text.lower()
 
 
-def test_dashboard_has_conflict_card(client):
-    r = client.get("/")
-    assert "conflict" in r.text.lower() or "conflit" in r.text.lower()
-
-
-def test_dashboard_api_has_top_conflicted(client):
-    r = client.get("/api/dashboard?scope=an")
-    assert r.status_code == 200
-    j = r.json()
-    assert "top_conflicted" in j
-    assert isinstance(j["top_conflicted"], list)
 
 
 def test_scope_selector_values(client):
