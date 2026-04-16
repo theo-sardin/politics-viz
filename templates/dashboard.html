@@ -1,27 +1,36 @@
 {% extends "base.html" %}
 {% block title %}Dashboard — politics-viz{% endblock %}
+{% set scope_labels = {'an': 'Assemblée nationale', 'senat': 'Sénat', 'parl': 'Assemblée + Sénat', 'all': 'All declarants (incl. local)'} %}
 {% block main %}
-<h1>Politicians' declared holdings</h1>
+<h1>Declared holdings — {{ scope_labels[scope] }}</h1>
 <p class="lede">
-    {{ '{:,}'.format(stats.declarants) }} politicians ·
+    {{ '{:,}'.format(stats.declarants) }} declarants ·
     {{ '{:,}'.format(stats.declarations) }} declarations ·
     {{ '{:,}'.format(stats.holdings) }} holdings ·
     source: HATVP.
 </p>
 
-<div class="window-selector">
-    <a href="/?window=12m" class="{% if window == '12m' %}active{% endif %}">12 months</a>
-    <a href="/?window=24m" class="{% if window == '24m' %}active{% endif %}">24 months</a>
-    <a href="/?window=all" class="{% if window == 'all' %}active{% endif %}">All time</a>
+<div class="selectors">
+    <div class="window-selector">
+        <a href="?window=12m&scope={{ scope }}" class="{% if window == '12m' %}active{% endif %}">12 months</a>
+        <a href="?window=24m&scope={{ scope }}" class="{% if window == '24m' %}active{% endif %}">24 months</a>
+        <a href="?window=all&scope={{ scope }}" class="{% if window == 'all' %}active{% endif %}">All time</a>
+    </div>
+    <div class="window-selector">
+        <a href="?window={{ window }}&scope=an" class="{% if scope == 'an' %}active{% endif %}">Députés</a>
+        <a href="?window={{ window }}&scope=senat" class="{% if scope == 'senat' %}active{% endif %}">Sénateurs</a>
+        <a href="?window={{ window }}&scope=parl" class="{% if scope == 'parl' %}active{% endif %}">Both</a>
+        <a href="?window={{ window }}&scope=all" class="{% if scope == 'all' %}active{% endif %}">All</a>
+    </div>
 </div>
 
 <div class="grid">
     <section class="card">
-        <h2>Top 20 companies by declared €</h2>
+        <h2>Top 10 companies (≥2 holders)</h2>
         <div class="chart-box"><canvas id="chart-top"></canvas></div>
     </section>
     <section class="card">
-        <h2>Top 20, stacked by party</h2>
+        <h2>Top 10, stacked by party</h2>
         <div class="chart-box"><canvas id="chart-stack"></canvas></div>
     </section>
     <section class="card">
@@ -48,7 +57,7 @@
 {% block scripts %}
 <script>
 (async function () {
-    const data = await pv.fetchJSON('/api/dashboard?window={{ window }}');
+    const data = await pv.fetchJSON('/api/dashboard?window={{ window }}&scope={{ scope }}');
 
     // Card 1: top companies (single bar)
     const top = data.top_companies;

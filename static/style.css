@@ -129,13 +129,19 @@ a { color: var(--accent); }
     height: 100% !important;
 }
 
+.selectors {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+}
+
 .window-selector {
     display: inline-flex;
     gap: 0.25rem;
     border: 1px solid var(--border);
     border-radius: var(--radius);
     padding: 0.15rem;
-    margin-bottom: 0.75rem;
 }
 
 .window-selector a {

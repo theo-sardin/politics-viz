@@ -23,6 +23,7 @@ window.pv = (function () {
                 },
                 scales: {
                     x: { ticks: { callback: (v) => formatEur(v) } },
+                    y: { ticks: { autoSkip: false, font: { size: 11 } } },
                 },
             },
         });
@@ -38,14 +39,14 @@ window.pv = (function () {
                 indexAxis: "y",
                 responsive: true,
                 maintainAspectRatio: false,
-                plugins: { legend: { position: "bottom" } },
+                plugins: { legend: { position: "bottom", labels: { boxWidth: 12, font: { size: 11 } } } },
                 onClick: (evt, items) => {
                     if (!onBarClick || !items.length) return;
                     onBarClick(items[0].index);
                 },
                 scales: {
                     x: { stacked: true, ticks: { callback: (v) => formatEur(v) } },
-                    y: { stacked: true },
+                    y: { stacked: true, ticks: { autoSkip: false, font: { size: 11 } } },
                 },
             },
         });
