@@ -196,11 +196,50 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     padding-top: 0.5rem;
 }
 
-/* Hemicycle */
-.hemicycle-card {
-    margin-bottom: 0.75rem;
-    position: relative;
+/* Composition bar */
+.composition-bar-wrap { position: relative; }
+
+.composition-bar {
+    display: flex;
+    height: 48px;
+    border-radius: var(--radius);
+    overflow: hidden;
+    gap: 2px;
 }
+
+.comp-seg {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: filter 0.12s;
+    min-width: 2px;
+}
+
+.comp-seg:hover { filter: brightness(1.15); }
+
+.comp-label {
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.82rem;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+}
+
+.members-bar { height: 40px; gap: 1px; }
+.member-seg { transition: opacity 0.12s, filter 0.12s; }
+
+.comp-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3rem 1rem;
+    margin-top: 0.5rem;
+    font-size: 0.78rem;
+    color: var(--muted);
+}
+
+.comp-legend-item { display: inline-flex; align-items: center; gap: 0.3rem; }
+.comp-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.comp-eur { font-weight: 600; color: var(--fg); }
 
 .tooltip {
     position: absolute;

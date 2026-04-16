@@ -24,11 +24,11 @@
     </div>
 </div>
 
-<section class="card hemicycle-card">
-    <h2>Hemicycle — <span id="hemicycle-title">holdings by party group</span></h2>
-    <div id="hemicycle"></div>
+<section class="card">
+    <h2><span id="hemicycle-title">Assembly composition — holdings by group</span></h2>
+    <div id="hemicycle" class="composition-bar-wrap"></div>
     <div id="hemicycle-tooltip" class="tooltip" style="display:none"></div>
-    <p id="hemicycle-hint" class="lede" style="text-align:center;margin:0.3rem 0 0">Click a group to see individual seats. <a href="#" id="hemicycle-back" style="display:none">← Back to groups</a></p>
+    <p id="hemicycle-hint" class="lede" style="text-align:center;margin:0.4rem 0 0"><a href="#" id="hemicycle-back" style="display:none">← Back to all groups</a></p>
 </section>
 
 <div class="grid">
@@ -79,31 +79,98 @@
 (async function () {
     try {
     const esc = pv.escapeHtml;
-
-    // Hemicycle DOM refs (must be before function calls due to TDZ)
     const hContainer = document.getElementById('hemicycle');
     const hTooltip = document.getElementById('hemicycle-tooltip');
     const hTitle = document.getElementById('hemicycle-title');
     const hBack = document.getElementById('hemicycle-back');
 
-    function svgEl(tag, attrs) {
-        const el = document.createElementNS('http://www.w3.org/2000/svg', tag);
-        for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-        return el;
+    // --- Composition bar: grouped (default) + drilldown to party members ---
+    const groups = await pv.fetchJSON('/api/hemicycle/groups?scope={{ scope }}');
+    renderGroups(groups);
+    hBack.addEventListener('click', (e) => { e.preventDefault(); renderGroups(groups); });
+
+    function renderGroups(groups) {
+        hContainer.innerHTML = '';
+        hTitle.textContent = 'Assembly composition — holdings by group';
+        hBack.style.display = 'none';
+        const totalSeats = groups.reduce((s, g) => s + g.n_seats, 0);
+        if (!totalSeats) { hContainer.textContent = 'No data.'; return; }
+
+        const bar = document.createElement('div');
+        bar.className = 'composition-bar';
+        for (const g of groups) {
+            const pct = (g.n_seats / totalSeats * 100);
+            if (pct < 0.5) continue;
+            const seg = document.createElement('div');
+            seg.className = 'comp-seg';
+            seg.style.width = pct + '%';
+            seg.style.background = g.color;
+            if (pct > 5) seg.innerHTML = `<span class="comp-label">${g.n_seats}</span>`;
+            seg.addEventListener('mouseenter', (e) => {
+                hTooltip.innerHTML = `<strong>${esc(g.label)}</strong><br>${g.n_seats} seats · ${pv.formatEur(g.total_eur)}`;
+                hTooltip.style.display = 'block';
+                const r = hContainer.getBoundingClientRect();
+                hTooltip.style.left = (e.clientX - r.left + 12) + 'px';
+                hTooltip.style.top = (e.clientY - r.top - 50) + 'px';
+            });
+            seg.addEventListener('mousemove', (e) => {
+                const r = hContainer.getBoundingClientRect();
+                hTooltip.style.left = (e.clientX - r.left + 12) + 'px';
+                hTooltip.style.top = (e.clientY - r.top - 50) + 'px';
+            });
+            seg.addEventListener('mouseleave', () => { hTooltip.style.display = 'none'; });
+            seg.addEventListener('click', () => drillDown(g.slug, g.label, g.color));
+            bar.appendChild(seg);
+        }
+        hContainer.appendChild(bar);
+
+        // Legend
+        const legend = document.createElement('div');
+        legend.className = 'comp-legend';
+        for (const g of groups) {
+            if (g.n_seats < totalSeats * 0.02) continue;
+            legend.innerHTML += `<span class="comp-legend-item"><span class="comp-dot" style="background:${g.color}"></span>${esc(g.label)} <span class="comp-eur">${pv.formatEur(g.total_eur)}</span></span>`;
+        }
+        hContainer.appendChild(legend);
     }
 
-    // Hemicycle — starts in grouped mode
-    const groups = await pv.fetchJSON('/api/hemicycle/groups?scope={{ scope }}');
-    renderHemicycleGroups(groups);
+    async function drillDown(slug, label, color) {
+        hTitle.textContent = label + ' — members by holdings';
+        hBack.style.display = 'inline';
+        const seats = await pv.fetchJSON('/api/hemicycle?scope={{ scope }}&party=' + slug);
+        hContainer.innerHTML = '';
 
-    document.getElementById('hemicycle-back').addEventListener('click', (e) => {
-        e.preventDefault();
-        renderHemicycleGroups(groups);
-    });
+        if (!seats.length) { hContainer.textContent = 'No members.'; return; }
+        seats.sort((a, b) => b.total - a.total);
 
+        const bar = document.createElement('div');
+        bar.className = 'composition-bar members-bar';
+        const maxTotal = seats[0].total || 1;
+        for (const s of seats) {
+            const seg = document.createElement('div');
+            seg.className = 'comp-seg member-seg';
+            seg.style.flex = '1';
+            const opacity = 0.3 + 0.7 * Math.min(s.total / (maxTotal * 0.5), 1);
+            seg.style.background = color;
+            seg.style.opacity = opacity;
+            seg.addEventListener('mouseenter', (e) => {
+                seg.style.opacity = '1';
+                hTooltip.innerHTML = `<strong>${esc(s.prenom)} ${esc(s.nom)}</strong><br>${pv.formatEur(s.total)}`;
+                hTooltip.style.display = 'block';
+                const r = hContainer.getBoundingClientRect();
+                hTooltip.style.left = (e.clientX - r.left + 12) + 'px';
+                hTooltip.style.top = (e.clientY - r.top - 50) + 'px';
+            });
+            seg.addEventListener('mouseleave', () => { seg.style.opacity = opacity; hTooltip.style.display = 'none'; });
+            seg.addEventListener('click', () => { window.location = '/declarant/' + s.id; });
+            bar.appendChild(seg);
+        }
+        hContainer.appendChild(bar);
+    }
+
+    // --- Dashboard data ---
     const data = await pv.fetchJSON('/api/dashboard?window={{ window }}&scope={{ scope }}');
 
-    // Card 1: top companies bar
     const top = data.top_companies;
     pv.barChart(document.getElementById('chart-top'), {
         labels: top.map(c => c.name),
@@ -111,7 +178,6 @@
         onBarClick: (i) => { window.location = '/company/' + top[i].slug; },
     });
 
-    // Card 2: stacked by party
     const tbp = data.top_by_party;
     pv.stackedBarChart(document.getElementById('chart-stack'), {
         labels: tbp.companies.map(c => c.name),
@@ -123,14 +189,12 @@
         onBarClick: (i) => { window.location = '/company/' + tbp.companies[i].slug; },
     });
 
-    // Card 3 + 4: surge tables
     renderSurgeTable('table-new', data.surges_new);
     renderSurgeTable('table-grown', data.surges_grown);
 
     function renderSurgeTable(id, rows) {
         if (!pv.fillTable(id, rows, 3)) return;
-        const tbody = document.querySelector('#' + id + ' tbody');
-        tbody.innerHTML = rows.map(r => `
+        document.querySelector('#' + id + ' tbody').innerHTML = rows.map(r => `
             <tr>
                 <td><a href="/company/${r.slug}">${esc(r.name)}</a></td>
                 <td class="num">${r.n_people}</td>
@@ -138,159 +202,6 @@
             </tr>`).join('');
     }
 
-    // --- Hemicycle rendering (rewritten for clean layout) ---
-
-    function arcPath(cx, cy, rInner, rOuter, startAngle, endAngle) {
-        // SVG path for a filled arc segment (wedge between two radii).
-        const x1o = cx - rOuter * Math.cos(startAngle), y1o = cy - rOuter * Math.sin(startAngle);
-        const x2o = cx - rOuter * Math.cos(endAngle),   y2o = cy - rOuter * Math.sin(endAngle);
-        const x2i = cx - rInner * Math.cos(endAngle),   y2i = cy - rInner * Math.sin(endAngle);
-        const x1i = cx - rInner * Math.cos(startAngle), y1i = cy - rInner * Math.sin(startAngle);
-        const large = (endAngle - startAngle > Math.PI) ? 1 : 0;
-        return `M ${x1o} ${y1o} A ${rOuter} ${rOuter} 0 ${large} 0 ${x2o} ${y2o} ` +
-               `L ${x2i} ${y2i} A ${rInner} ${rInner} 0 ${large} 1 ${x1i} ${y1i} Z`;
-    }
-
-    function renderHemicycleGroups(groups) {
-        hContainer.innerHTML = '';
-        hTitle.textContent = 'holdings by party group';
-        hBack.style.display = 'none';
-        const W = hContainer.clientWidth || 800, H = Math.min(W * 0.42, 280);
-        const cx = W / 2, cy = H + 4;
-        const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H + 8}`, width: W, height: H + 8 });
-        svg.style.display = 'block';
-
-        const totalSeats = groups.reduce((s, g) => s + g.n_seats, 0);
-        if (!totalSeats) { hContainer.textContent = 'No data.'; return; }
-
-        const rInner = H * 0.35, rOuter = H * 0.98;
-        const gap = 0.012;
-        let angle = 0.02;
-        const span = Math.PI - 0.04;
-
-        for (const g of groups) {
-            const frac = g.n_seats / totalSeats;
-            const sweep = span * frac;
-            const a1 = angle + gap / 2, a2 = angle + sweep - gap / 2;
-            if (a2 <= a1) { angle += sweep; continue; }
-
-            const path = svgEl('path', {
-                d: arcPath(cx, cy, rInner, rOuter, a1, a2),
-                fill: g.color, opacity: '0.85',
-            });
-            path.style.cursor = 'pointer';
-            path.style.transition = 'opacity 0.12s';
-            path.addEventListener('mouseenter', (e) => {
-                path.setAttribute('opacity', '1');
-                hTooltip.innerHTML = `<strong>${esc(g.label)}</strong><br>` +
-                    `${g.n_seats} seats · ${pv.formatEur(g.total_eur)}`;
-                hTooltip.style.display = 'block';
-                const rect = hContainer.getBoundingClientRect();
-                hTooltip.style.left = (e.clientX - rect.left + 12) + 'px';
-                hTooltip.style.top = (e.clientY - rect.top - 45) + 'px';
-            });
-            path.addEventListener('mouseleave', () => {
-                path.setAttribute('opacity', '0.85');
-                hTooltip.style.display = 'none';
-            });
-            path.addEventListener('click', () => drillDown(g.slug, g.label));
-            svg.appendChild(path);
-
-            // Label: seat count + total €
-            const midA = (a1 + a2) / 2, midR = (rInner + rOuter) / 2;
-            const lx = cx - midR * Math.cos(midA), ly = cy - midR * Math.sin(midA);
-            if (frac > 0.05) {
-                const t1 = svgEl('text', {
-                    x: lx, y: ly - 7, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-                    fill: '#fff', 'font-size': Math.max(10, Math.min(14, frac * 140)),
-                    'font-weight': '700', 'pointer-events': 'none',
-                });
-                t1.textContent = g.n_seats;
-                svg.appendChild(t1);
-                const t2 = svgEl('text', {
-                    x: lx, y: ly + 9, 'text-anchor': 'middle', 'dominant-baseline': 'central',
-                    fill: 'rgba(255,255,255,0.8)', 'font-size': Math.max(8, Math.min(11, frac * 100)),
-                    'pointer-events': 'none',
-                });
-                t2.textContent = pv.formatEur(g.total_eur);
-                svg.appendChild(t2);
-            }
-            angle += sweep;
-        }
-        hContainer.appendChild(svg);
-    }
-
-    async function drillDown(partySlug, partyLabel) {
-        hTitle.textContent = partyLabel + ' — individual seats';
-        hBack.style.display = 'inline';
-        const seats = await pv.fetchJSON('/api/hemicycle?scope={{ scope }}&party=' + partySlug);
-        renderHemicycleSeats(seats);
-    }
-
-    function renderHemicycleSeats(seats) {
-        hContainer.innerHTML = '';
-        const W = hContainer.clientWidth || 800, H = Math.min(W * 0.42, 280);
-        const cx = W / 2, cy = H + 4;
-        const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H + 8}`, width: W, height: H + 8 });
-        svg.style.display = 'block';
-
-        const n = seats.length;
-        if (!n) { hContainer.textContent = 'No seats.'; return; }
-
-        // Fixed dot radius — no wild sizing. Subtle opacity for holdings.
-        const dotR = Math.max(3, Math.min(7, 180 / Math.sqrt(n)));
-        const spacing = dotR * 2.6;
-
-        // Compute how many rows fit and how many seats per row.
-        const rMin = H * 0.2, rMax = H * 0.95;
-        const nRows = Math.max(3, Math.round((rMax - rMin) / spacing));
-        const rows = [];
-        let remaining = n;
-        for (let i = 0; i < nRows && remaining > 0; i++) {
-            const r = rMin + (rMax - rMin) * i / (nRows - 1);
-            const perimeter = Math.PI * r * 0.92;
-            const cap = Math.floor(perimeter / spacing);
-            const count = (i < nRows - 1) ? Math.min(cap, Math.ceil(remaining / (nRows - i))) : remaining;
-            rows.push({ r, count });
-            remaining -= count;
-        }
-
-        const maxHolding = Math.max(...seats.map(s => s.total), 1);
-        let idx = 0;
-        for (const { r, count } of rows) {
-            for (let j = 0; j < count && idx < n; j++) {
-                const angle = Math.PI * (0.04 + 0.92 * j / Math.max(count - 1, 1));
-                const x = cx - r * Math.cos(angle), y = cy - r * Math.sin(angle);
-                const s = seats[idx];
-                // Subtle opacity: 0.4 (no holdings) → 1.0 (max holdings)
-                const op = 0.4 + 0.6 * Math.min(s.total / (maxHolding * 0.3), 1);
-
-                const c = svgEl('circle', {
-                    cx: x, cy: y, r: dotR, fill: s.party_color, opacity: op.toFixed(2),
-                });
-                c.style.cursor = 'pointer';
-                c.style.transition = 'opacity 0.12s, r 0.12s';
-                c.addEventListener('mouseenter', (e) => {
-                    c.setAttribute('opacity', '1'); c.setAttribute('r', dotR * 1.4);
-                    hTooltip.innerHTML = `<strong>${esc(s.prenom)} ${esc(s.nom)}</strong><br>${pv.formatEur(s.total)}`;
-                    hTooltip.style.display = 'block';
-                    const rect = hContainer.getBoundingClientRect();
-                    hTooltip.style.left = (e.clientX - rect.left + 12) + 'px';
-                    hTooltip.style.top = (e.clientY - rect.top - 45) + 'px';
-                });
-                c.addEventListener('mouseleave', () => {
-                    c.setAttribute('opacity', op.toFixed(2)); c.setAttribute('r', dotR);
-                    hTooltip.style.display = 'none';
-                });
-                c.addEventListener('click', () => { window.location = '/declarant/' + s.id; });
-                svg.appendChild(c);
-                idx++;
-            }
-        }
-        hContainer.appendChild(svg);
-    }
-
-    // Card 5: conflicts
     const conflicts = data.top_conflicted;
     if (pv.fillTable('table-conflicts', conflicts, 5)) {
         document.querySelector('#table-conflicts tbody').innerHTML = conflicts.map(r => `
@@ -302,6 +213,7 @@
                 <td class="num">${r.n_spouse_flags || '—'}</td>
             </tr>`).join('');
     }
+
     } catch(e) { console.error('Dashboard error:', e); document.getElementById('hemicycle').textContent = 'Error: ' + e.message; }
 })();
 </script>
