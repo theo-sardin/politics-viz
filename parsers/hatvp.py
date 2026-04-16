@@ -16,7 +16,7 @@ from typing import Iterator
 
 from lxml import etree
 
-from parsers.normalize import company_slug
+from parsers.normalize import company_slug, strip_accents
 
 _EUR_GARBAGE = re.compile(r"[^\d\-]")
 
@@ -43,6 +43,7 @@ class DeclarationRecord:
     prenom: str
     date_naissance: str | None  # ISO 8601 date or None
     holdings: list[Holding] = field(default_factory=list)
+    spouse_employers: list[str] = field(default_factory=list)
 
 
 def parse(path: str) -> Iterator[DeclarationRecord]:
@@ -85,6 +86,7 @@ def _parse_declaration(elem) -> DeclarationRecord | None:
         if declarant is not None
         else None,
         holdings=list(_iter_holdings(elem)),
+        spouse_employers=list(_iter_spouse_employers(elem)),
     )
 
 
@@ -92,6 +94,21 @@ def _iter_holdings(elem) -> Iterator[Holding]:
     yield from _iter_participation_financiere(elem)
     yield from _iter_valeurs_bourse(elem)
     yield from _iter_participation_dirigeant(elem)
+
+
+_SPOUSE_JUNK = {"neant", "0", "sans emploi", "sans", "aucun", "aucune", "na", "n/a", "non", "rien"}
+
+
+def _iter_spouse_employers(elem) -> Iterator[str]:
+    """Yield employer names from ``activProfConjointDto``."""
+    for item in _items(elem, "activProfConjointDto"):
+        employer = _clean(_text(item, "employeurConjoint"))
+        if not employer:
+            continue
+        folded = strip_accents(employer).lower().strip()
+        if folded in _SPOUSE_JUNK:
+            continue
+        yield employer
 
 
 def _iter_participation_financiere(elem) -> Iterator[Holding]:

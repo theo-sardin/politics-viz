@@ -24,6 +24,7 @@ CREATE TABLE IF NOT EXISTS declarant (
     date_naissance  TEXT,
     party_id        INTEGER REFERENCES party(id),
     party_source    TEXT,
+    spouse_employers TEXT,  -- JSON array of employer strings, from activProfConjointDto
     UNIQUE(nom, prenom, date_naissance)
 );
 
@@ -59,6 +60,56 @@ CREATE TABLE IF NOT EXISTS holding_change (
     change_type   TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS vote (
+    id               INTEGER PRIMARY KEY,
+    scrutin_numero   INTEGER NOT NULL UNIQUE,
+    date             TEXT NOT NULL,
+    type             TEXT,
+    titre            TEXT NOT NULL,
+    sort             TEXT,
+    n_pour           INTEGER,
+    n_contre         INTEGER,
+    n_abstention     INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS vote_position (
+    id            INTEGER PRIMARY KEY,
+    vote_id       INTEGER NOT NULL REFERENCES vote(id),
+    declarant_id  INTEGER NOT NULL REFERENCES declarant(id),
+    position      TEXT NOT NULL,
+    groupe        TEXT
+);
+
+CREATE TABLE IF NOT EXISTS vote_sector_tag (
+    id         INTEGER PRIMARY KEY,
+    vote_id    INTEGER NOT NULL REFERENCES vote(id),
+    sector     TEXT NOT NULL,
+    direction  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS company_sector (
+    company_slug  TEXT NOT NULL,
+    sector        TEXT NOT NULL,
+    source        TEXT,
+    PRIMARY KEY (company_slug, sector)
+);
+
+CREATE TABLE IF NOT EXISTS conflict_flag (
+    id            INTEGER PRIMARY KEY,
+    declarant_id  INTEGER NOT NULL REFERENCES declarant(id),
+    vote_id       INTEGER NOT NULL REFERENCES vote(id),
+    company_slug  TEXT NOT NULL,
+    sector        TEXT NOT NULL,
+    score         INTEGER NOT NULL,
+    reason        TEXT NOT NULL,
+    source        TEXT NOT NULL DEFAULT 'holding'
+);
+
+CREATE INDEX IF NOT EXISTS idx_vote_position_vote       ON vote_position(vote_id);
+CREATE INDEX IF NOT EXISTS idx_vote_position_declarant  ON vote_position(declarant_id);
+CREATE INDEX IF NOT EXISTS idx_vote_sector_tag_vote     ON vote_sector_tag(vote_id);
+CREATE INDEX IF NOT EXISTS idx_conflict_declarant       ON conflict_flag(declarant_id);
+CREATE INDEX IF NOT EXISTS idx_conflict_vote            ON conflict_flag(vote_id);
 CREATE INDEX IF NOT EXISTS idx_holding_company       ON holding(company_slug);
 CREATE INDEX IF NOT EXISTS idx_holding_declaration   ON holding(declaration_id);
 CREATE INDEX IF NOT EXISTS idx_change_declarant      ON holding_change(declarant_id);

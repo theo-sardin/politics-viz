@@ -9,6 +9,7 @@ Subcommands:
 
 from __future__ import annotations
 
+import json
 import logging
 import sqlite3
 import sys
@@ -86,7 +87,10 @@ def _upsert_record(cur: sqlite3.Cursor, rec: DeclarationRecord) -> bool:
 
 
 def _upsert_declarant(cur: sqlite3.Cursor, rec: DeclarationRecord) -> int:
-    """Find or create a declarant by (nom, prenom, date_naissance)."""
+    """Find or create a declarant by (nom, prenom, date_naissance).
+
+    Also updates spouse_employers if the new declaration carries any.
+    """
     row = cur.execute(
         """SELECT id FROM declarant
            WHERE nom = ? AND prenom = ?
@@ -94,14 +98,26 @@ def _upsert_declarant(cur: sqlite3.Cursor, rec: DeclarationRecord) -> int:
         (rec.nom, rec.prenom, rec.date_naissance, rec.date_naissance),
     ).fetchone()
     if row is not None:
-        return row["id"]
-    cur.execute(
-        "INSERT INTO declarant(nom, prenom, date_naissance) VALUES (?, ?, ?)",
-        (rec.nom, rec.prenom, rec.date_naissance),
-    )
-    # Touch person_key so imports are consistent (used later for matching).
-    _ = person_key(rec.nom, rec.prenom)
-    return cur.lastrowid
+        did = row["id"]
+    else:
+        cur.execute(
+            "INSERT INTO declarant(nom, prenom, date_naissance) VALUES (?, ?, ?)",
+            (rec.nom, rec.prenom, rec.date_naissance),
+        )
+        _ = person_key(rec.nom, rec.prenom)
+        did = cur.lastrowid
+    # Merge spouse employers from every declaration (best-effort accumulate).
+    if rec.spouse_employers:
+        existing = cur.execute(
+            "SELECT spouse_employers FROM declarant WHERE id = ?", (did,)
+        ).fetchone()["spouse_employers"]
+        prev = json.loads(existing) if existing else []
+        merged = list(dict.fromkeys(prev + rec.spouse_employers))  # dedup, preserve order
+        cur.execute(
+            "UPDATE declarant SET spouse_employers = ? WHERE id = ?",
+            (json.dumps(merged, ensure_ascii=False), did),
+        )
+    return did
 
 
 def cmd_changes(conn: sqlite3.Connection) -> dict[str, int]:
