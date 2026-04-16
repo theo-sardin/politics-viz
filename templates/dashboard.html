@@ -51,6 +51,19 @@
             </table>
         </div>
     </section>
+    <section class="card conflict-card" style="grid-column: 1 / -1">
+        <h2>⚠ Potential conflicts of interest</h2>
+        <p class="disclaimer">Flags are mechanical co-occurrences between declared holdings (or spouse employers) and sector-related votes. They indicate potential conflicts, not wrongdoing.</p>
+        <table id="table-conflicts">
+            <thead><tr>
+                <th>Name</th><th>Party</th>
+                <th class="num">Flagged votes</th>
+                <th class="num">Holdings in flagged sectors</th>
+                <th class="num">Spouse flags</th>
+            </tr></thead>
+            <tbody></tbody>
+        </table>
+    </section>
 </div>
 {% endblock %}
 
@@ -92,6 +105,19 @@
                 <td><a href="/company/${r.slug}">${esc(r.name)}</a></td>
                 <td class="num">${r.n_people}</td>
                 <td class="num">${pv.formatEur(r.total)}</td>
+            </tr>`).join('');
+    }
+
+    // Card 5: conflicts
+    const conflicts = data.top_conflicted;
+    if (pv.fillTable('table-conflicts', conflicts, 5)) {
+        document.querySelector('#table-conflicts tbody').innerHTML = conflicts.map(r => `
+            <tr>
+                <td><a href="/declarant/${r.id}">${esc(r.prenom)} ${esc(r.nom)}</a></td>
+                <td><span class="party-pill" style="background:${r.party_color}">${esc(r.party_label)}</span></td>
+                <td class="num">${r.n_votes}</td>
+                <td class="num">${pv.formatEur(r.holding_eur)}</td>
+                <td class="num">${r.n_spouse_flags || '—'}</td>
             </tr>`).join('');
     }
 })();

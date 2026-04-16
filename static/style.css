@@ -196,6 +196,37 @@ td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
     padding-top: 0.5rem;
 }
 
+/* Conflict card styling */
+.conflict-card { border-left: 3px solid #e74c3c; }
+
+.disclaimer {
+    font-size: 0.78rem;
+    color: var(--muted);
+    font-style: italic;
+    margin: 0 0 0.5rem;
+    line-height: 1.4;
+}
+
+/* Conflict flags on declarant page */
+.flag-row { background: #fff3f3; }
+@media (prefers-color-scheme: dark) { .flag-row { background: #2a1515; } }
+
+.flag-reason {
+    font-size: 0.82rem;
+    color: var(--fg);
+    line-height: 1.4;
+}
+
+.sector-pill {
+    display: inline-block;
+    padding: 0.05rem 0.4rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    background: var(--border);
+    color: var(--fg);
+    font-weight: 500;
+}
+
 /* Empty-state text for tables with no data. */
 td.empty {
     text-align: center;

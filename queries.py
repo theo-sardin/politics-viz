@@ -418,3 +418,61 @@ def surges(
         (change_type, start, limit),
     ).fetchall()
     return _prettify([dict(r) for r in rows])
+
+
+# ---------------------------------------------------------------------------
+# Conflict queries
+# ---------------------------------------------------------------------------
+
+
+def top_conflicted(
+    conn: sqlite3.Connection, scope: Scope = "an", limit: int = 10
+) -> list[dict]:
+    """Top declarants by number of conflict flags, within scope."""
+    rows = conn.execute(
+        f"""
+        SELECT de.id AS id, de.nom AS nom, de.prenom AS prenom,
+               COALESCE(p.slug, 'none') AS party_slug,
+               COALESCE(p.label, 'Non affilié / Local') AS party_label,
+               COALESCE(p.color, '#999999') AS party_color,
+               COUNT(cf.id)                             AS n_flags,
+               COUNT(DISTINCT cf.vote_id)               AS n_votes,
+               SUM(CASE WHEN cf.source='holding' THEN cf.score ELSE 0 END) AS holding_eur,
+               COUNT(CASE WHEN cf.source='spouse' THEN 1 END) AS n_spouse_flags
+        FROM conflict_flag cf
+        JOIN declarant de ON cf.declarant_id = de.id
+        LEFT JOIN party p ON de.party_id = p.id
+        JOIN declaration d ON d.declarant_id = de.id
+        WHERE {scope_clause(scope)}
+        GROUP BY de.id
+        ORDER BY n_flags DESC
+        LIMIT ?
+        """,
+        (limit,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def declarant_conflicts(conn: sqlite3.Connection, declarant_id: int) -> list[dict]:
+    """All conflict flags for a declarant, newest first."""
+    rows = conn.execute(
+        """
+        SELECT cf.sector, cf.reason, cf.source, cf.score,
+               v.date, v.titre, v.scrutin_numero
+        FROM conflict_flag cf
+        JOIN vote v ON cf.vote_id = v.id
+        WHERE cf.declarant_id = ?
+        ORDER BY v.date DESC
+        """,
+        (declarant_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def declarant_vote_count(conn: sqlite3.Connection, declarant_id: int) -> int:
+    """Total votes cast by this declarant."""
+    row = conn.execute(
+        "SELECT COUNT(*) FROM vote_position WHERE declarant_id = ?",
+        (declarant_id,),
+    ).fetchone()
+    return row[0] if row else 0
