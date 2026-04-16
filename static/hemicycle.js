@@ -76,26 +76,32 @@ pv.hemicycle = (function () {
         const svgH = maxH + topMargin + botMargin;
         const cy = svgH - botMargin;   // vertical centre of the arcs
 
+        // Use the outermost row's seat count as the column grid.  Each seat
+        // in a smaller row snaps to the nearest column so that dots across
+        // rows share the same angle — producing clean radial alignment.
+        const maxSeats = Math.max(...seatsPerRow);
+
         const positions = [];
         for (let row = 0; row < nRows; row++) {
             const r = rowRadii[row] * scale;
             const n = seatsPerRow[row];
             for (let j = 0; j < n; j++) {
-                // fraction: 0 = left edge (angle ≈ π), 1 = right edge (angle ≈ 0)
                 const frac = j / Math.max(n - 1, 1);
-                const angle = aMax - frac * (aMax - aMin);
+                // Snap to a discrete column in the maxSeats grid
+                const col = Math.round(frac * (maxSeats - 1));
+                // Compute angle from the column, not from the row's own spacing
+                const colAngle = aMax - (col / Math.max(maxSeats - 1, 1)) * (aMax - aMin);
                 positions.push({
-                    x: halfW + r * Math.cos(angle),
-                    y: cy - r * Math.sin(angle),
-                    frac,
+                    x: halfW + r * Math.cos(colAngle),
+                    y: cy - r * Math.sin(colAngle),
+                    col,
                     row,
                 });
             }
         }
 
-        // Sort by fractional arc position so radial columns stay aligned,
-        // then by row (inner→outer) within each column
-        positions.sort((a, b) => a.frac - b.frac || a.row - b.row);
+        // Sort by column (left→right), then by row (inner→outer)
+        positions.sort((a, b) => a.col - b.col || a.row - b.row);
 
         const seatRadius = Math.max(2.5, Math.min(6, scale * rowStep * 0.4));
 
