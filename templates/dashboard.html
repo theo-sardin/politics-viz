@@ -99,7 +99,7 @@
         hBack.style.display = 'none';
 
         const W = hWrap.clientWidth || 800;
-        const H = Math.round(W * 0.38);
+        const H = Math.min(Math.round(W * 0.28), 280);
         hSvg.attr('width', W).attr('height', H);
 
         const totalSeats = groups.reduce((s, g) => s + g.n_seats, 0);

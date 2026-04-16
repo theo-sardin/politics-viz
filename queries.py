@@ -471,30 +471,35 @@ def declarant_conflicts(conn: sqlite3.Connection, declarant_id: int) -> list[dic
     return [dict(r) for r in rows]
 
 
-def hemicycle_groups(conn: sqlite3.Connection, scope: Scope = "an") -> list[dict]:
+def hemicycle_groups(conn: sqlite3.Connection, scope: Scope = "an", only_holders: bool = True) -> list[dict]:
     """Party-level aggregates for the grouped hemicycle view.
 
     Returns [{slug, label, color, n_seats, total_eur}] sorted left→right.
     """
+    # Subquery: only declarants with holdings > 0
     rows = conn.execute(
         f"""
-        SELECT COALESCE(p.slug, 'none')    AS slug,
-               COALESCE(p.label, 'Non affilié') AS label,
-               COALESCE(p.color, '#999999') AS color,
-               COUNT(DISTINCT de.id)        AS n_seats,
-               COALESCE(SUM(h.evaluation_eur), 0) AS total_eur
-        FROM declarant de
-        LEFT JOIN party p ON de.party_id = p.id
-        LEFT JOIN declaration d ON d.declarant_id = de.id AND {scope_clause(scope)}
-        LEFT JOIN holding h ON h.declaration_id = d.id
-             AND h.kind = 'participation_financiere'
-        WHERE EXISTS (
-            SELECT 1 FROM declaration dd
-            WHERE dd.declarant_id = de.id AND {scope_clause(scope)}
+        SELECT slug, label, color, COUNT(*) AS n_seats, SUM(total) AS total_eur
+        FROM (
+            SELECT COALESCE(p.slug, 'none')    AS slug,
+                   COALESCE(p.label, 'Non affilié') AS label,
+                   COALESCE(p.color, '#999999') AS color,
+                   COALESCE(SUM(h.evaluation_eur), 0) AS total
+            FROM declarant de
+            LEFT JOIN party p ON de.party_id = p.id
+            LEFT JOIN declaration d ON d.declarant_id = de.id AND {scope_clause(scope)}
+            LEFT JOIN holding h ON h.declaration_id = d.id
+                 AND h.kind = 'participation_financiere'
+            WHERE EXISTS (
+                SELECT 1 FROM declaration dd
+                WHERE dd.declarant_id = de.id AND {scope_clause(scope)}
+            )
+            GROUP BY de.id
+            HAVING total > 0
         )
-        GROUP BY p.slug
+        GROUP BY slug
         ORDER BY
-            CASE COALESCE(p.slug, 'none')
+            CASE slug
                 WHEN 'lfi' THEN 1  WHEN 'pcf' THEN 2  WHEN 'eelv' THEN 3
                 WHEN 'ps' THEN 4   WHEN 'liot' THEN 5  WHEN 'renaissance' THEN 6
                 WHEN 'modem' THEN 7 WHEN 'horizons' THEN 8 WHEN 'udi' THEN 9
@@ -528,6 +533,7 @@ def hemicycle(conn: sqlite3.Connection, scope: Scope = "an") -> list[dict]:
             WHERE dd.declarant_id = de.id AND {scope_clause(scope)}
         )
         GROUP BY de.id
+        HAVING total > 0
         ORDER BY
             CASE COALESCE(p.slug, 'none')
                 WHEN 'lfi' THEN 1
