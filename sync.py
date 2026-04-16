@@ -20,9 +20,8 @@ import httpx
 
 import db
 from parsers.hatvp import DeclarationRecord, parse
-from parsers.normalize import person_key
-from parsers.parties import cmd_parties
 from parsers.normalize import company_slug as make_slug
+from parsers.parties import cmd_parties
 from parsers.sectors import cmd_sectors, tag_company
 from parsers.votes import fetch_scrutin_detail, fetch_scrutin_list
 
@@ -110,7 +109,6 @@ def _upsert_declarant(cur: sqlite3.Cursor, rec: DeclarationRecord) -> int:
             "INSERT INTO declarant(nom, prenom, date_naissance) VALUES (?, ?, ?)",
             (rec.nom, rec.prenom, rec.date_naissance),
         )
-        _ = person_key(rec.nom, rec.prenom)
         did = cur.lastrowid
     # Merge spouse employers from every declaration (best-effort accumulate).
     if rec.spouse_employers:

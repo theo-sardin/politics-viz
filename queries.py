@@ -10,7 +10,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from typing import Literal
 
-from parsers.normalize import display_name
+from parsers.normalize import display_name, strip_accents
 
 Window = Literal["12m", "24m", "all"]
 Scope = Literal["an", "senat", "parl", "all"]
@@ -554,7 +554,6 @@ def search_declarants(
     conn: sqlite3.Connection, q: str, scope: Scope = "an", limit: int = 20
 ) -> list[dict]:
     """Search declarants by name prefix (accent-insensitive)."""
-    from parsers.normalize import strip_accents
     folded = "%" + strip_accents(q).lower() + "%"
     rows = conn.execute(
         f"""
