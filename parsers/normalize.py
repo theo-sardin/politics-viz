@@ -29,18 +29,35 @@ def strip_accents(s: str) -> str:
     )
 
 
+# Merge variant slugs to a canonical form. Handles free-text typos in HATVP
+# declarations (e.g. "BNP Parisbas" → "bnp-paribas").
+_SLUG_ALIASES: dict[str, str] = {
+    "bnp": "bnp-paribas",
+    "bnp-parisbas": "bnp-paribas",
+    "bnp-paris-bas": "bnp-paribas",
+    "total-energies": "totalenergies",
+    "total": "totalenergies",
+    "lvmh-moet-vuitton": "lvmh",
+    "lvmh-moet-hennessy": "lvmh",
+    "hermes-intl": "hermes-international",
+    "l-oreal-actions": "l-oreal",
+}
+
+
 def company_slug(name: str | None) -> str:
     """Slug a company name for grouping.
 
     Empty input → empty slug. Suffixes like 'SA', 'SARL' stripped to
     collapse 'Crédit Agricole SA' and 'Crédit Agricole' into one bucket.
+    Known aliases are merged to a canonical slug.
     """
     if not name:
         return ""
     s = strip_accents(name).lower()
     s = _COMPANY_SUFFIXES.sub(" ", s)
     s = _NON_WORD.sub("-", s)
-    return s.strip("-")
+    slug = s.strip("-")
+    return _SLUG_ALIASES.get(slug, slug)
 
 
 # Display-name overrides for known companies whose raw HATVP names are
