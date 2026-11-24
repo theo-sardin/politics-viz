@@ -1,7 +1,7 @@
 [project]
 name = "politics-viz"
-version = "0.1.0"
-description = "Visualization of French politicians' declared financial interests (HATVP)"
+version = "0.2.0"
+description = "Radar des intérêts financiers déclarés des responsables publics français (HATVP × votes × lobbying)"
 requires-python = ">=3.11"
 dependencies = [
     "fastapi>=0.115",
@@ -16,15 +16,19 @@ dev = [
     "pytest>=8.3",
 ]
 
+[project.scripts]
+pv = "pv.cli:main"
+
 [build-system]
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 
-[tool.setuptools]
-py-modules = ["app", "db", "sync"]
-
 [tool.setuptools.packages.find]
-include = ["parsers*"]
+include = ["pv*"]
+
+[tool.setuptools.package-data]
+"pv.web" = ["templates/*.html", "static/*", "static/**/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]

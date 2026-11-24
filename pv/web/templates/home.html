@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Radar des intérêts — {{ scopes[scope][0] }}{% endblock %}
+{% block main %}
+{% set st = data.stats %}
+<div class="page-head">
+    <div>
+        <h1>Qui détient quoi, et qui vote quoi</h1>
+        <p class="lede">Les participations, activités et liens familiaux déclarés à la HATVP, croisés avec les votes, les rôles de rapporteur et le lobbying déclaré. Ce qui mérite un second regard remonte en premier.</p>
+    </div>
+    {{ m.scope_tabs(scope, url_with) }}
+</div>
+
+<div class="tiles">
+    <div class="tile">
+        <div class="l">{{ scopes[scope][0] }}</div>
+        <div class="v">{{ st.people | intfr }}</div>
+        <div class="s">{{ st.with_declaration | intfr }} avec une déclaration d'intérêts publiée</div>
+    </div>
+    <div class="tile">
+        <div class="l">Déclarent des participations</div>
+        <div class="v">{{ st.with_holdings | intfr }}</div>
+        <div class="s">{% if st.people %}{{ (100 * st.with_holdings / st.people) | round | int }} % du périmètre{% endif %}</div>
+    </div>
+    <div class="tile">
+        <div class="l">Valeur déclarée</div>
+        <div class="v">{{ st.total_eur | eur }}</div>
+        <div class="s">participations financières, dernière déclaration</div>
+    </div>
+    <div class="tile">
+        <div class="l">Signaux à examiner</div>
+        <div class="v">{{ (st.signals.get('fort', 0) + st.signals.get('moyen', 0)) | intfr }}</div>
+        <div class="s">{{ m.level('fort') }} {{ st.signals.get('fort', 0) }} &nbsp; {{ m.level('moyen') }} {{ st.signals.get('moyen', 0) }} &nbsp; {{ m.level('faible') }} {{ st.signals.get('faible', 0) }}</div>
+    </div>
+    <div class="tile">
+        <div class="l">Mouvements de titres</div>
+        <div class="v">{{ st.moves | intfr }}</div>
+        <div class="s">lignes modifiées sur 12 mois</div>
+    </div>
+</div>
+
+<div class="grid g-main">
+    <section class="card">
+        <h2>À la une <a href="/signaux?scope={{ scope }}">Tous les signaux →</a></h2>
+        {% if data.top %}
+        <p class="small" style="margin:-4px 0 10px">{{ m.vote_keys() }}</p>
+        <div class="signals">
+            {% for s in data.top %}{{ m.signal(s, compact=True) }}{% endfor %}
+        </div>
+        {% else %}
+        <p class="empty">Aucun signal dans ce périmètre.</p>
+        {% endif %}
+    </section>
+
+    <div class="stack">
+        {% if data.hemicycle %}
+        {% set h = data.hemicycle %}
+        <section class="card">
+            <h2>{{ 'Hémicycle' if scope == 'an' else 'Sénat' }}
+                <span class="seg" id="hemi-modes" role="group" aria-label="Colorer les sièges par">
+                    <button type="button" data-mode="by-signal" class="on">Signaux</button>
+                    <button type="button" data-mode="by-wealth">Participations</button>
+                    <button type="button" data-mode="by-group">Groupes</button>
+                </span>
+            </h2>
+            <svg class="hemi by-signal" id="hemi" viewBox="0 0 {{ h.w }} {{ h.h }}" role="img" aria-label="Répartition des {{ h.seats | length }} sièges, un point par élu">
+                {% for s in h.seats %}<a href="/personne/{{ s.pslug }}" data-tip="{{ s.prenom }} {{ s.nom }}&#10;{{ s.group_label or 'Sans groupe' }}&#10;{% if s.n_holdings %}{{ s.portfolio_eur | eur }} déclarés · {{ s.n_holdings }} ligne{{ 's' if s.n_holdings > 1 }}{% else %}Aucune participation déclarée{% endif %}{% if s.n_signals %}&#10;{{ s.n_signals }} signal{{ 'aux' if s.n_signals > 1 }}{% if s.level %} · niveau {{ labels.LEVELS[s.level] | lower }}{% endif %}{% endif %}"><circle cx="{{ s.x }}" cy="{{ s.y }}" r="{{ h.r }}" class="{{ s.level or '' }} w{{ s.wealth }}" style="{{ m.gstyle(s) }}"/></a>{% endfor %}
+            </svg>
+            <div class="hemi-legend on" data-for="by-signal">
+                <span class="key" style="--k:var(--critical)">Signal fort</span><span class="key" style="--k:var(--serious)">Moyen</span><span class="key" style="--k:var(--axis)">Faible</span><span class="key" style="--k:var(--seat-none)">Aucun</span>
+            </div>
+            <div class="hemi-legend" data-for="by-wealth">
+                <span class="key" style="--k:var(--seat-none)">Rien</span><span class="key" style="--k:var(--seq-1)">&lt; 10 k€</span><span class="key" style="--k:var(--seq-2)">10–100 k€</span><span class="key" style="--k:var(--seq-3)">100 k€–1 M€</span><span class="key" style="--k:var(--seq-4)">1–10 M€</span><span class="key" style="--k:var(--seq-6)">&gt; 10 M€</span>
+            </div>
+            <div class="groupbar" aria-hidden="true">
+                {% for g in h.groups %}<a href="/groupe/{{ g.slug }}" style="flex:{{ g.size }};{{ m.gstyle({'group_color': g.color, 'group_color_dark': g.color_dark}) }}" data-tip="{{ g.label }}&#10;{{ g.size }} sièges · {{ g.holders }} avec participations&#10;{{ g.total | eur }} déclarés"></a>{% endfor %}
+            </div>
+            <div class="grouplist">
+                {% for g in h.groups %}<a class="grp" href="/groupe/{{ g.slug }}" style="--g:{{ g.color }};--gd:{{ g.color_dark }}" data-tip="{{ g.label }}"><span class="dot"></span>{{ g.code }} <span class="muted">{{ g.size }}</span></a>{% endfor %}
+            </div>
+            <p class="note">Un point par élu, placé par groupe de gauche à droite : ce ne sont pas les sièges réels.</p>
+        </section>
+        {% endif %}
+
+        <section class="card">
+            <h2>Derniers mouvements <a href="/mouvements?scope={{ scope }}">Tout voir →</a></h2>
+            {% if data.moves %}
+            <div class="list">
+                {% for mv in data.moves %}
+                <div>
+                    <span><span class="chg chg-{{ mv.kind }}">{{ labels.CHANGES[mv.kind] }}</span> <a href="/societe/{{ mv.company_slug }}">{{ mv.company_name }}</a>
+                        <span class="muted">· {{ (mv.value_after if mv.kind in ('entree', 'renforcement') else mv.value_before) | eur }}</span></span>
+                    <span class="small"><a href="/personne/{{ mv.pslug }}" style="color:var(--ink)">{{ mv.prenom }} {{ mv.nom }}</a>{% if mv.group_code %} <span class="muted">({{ mv.group_code }})</span>{% endif %}
+                        <span class="muted">· entre le {{ mv.window_start | date_short }} et le {{ mv.window_end | date }}</span></span>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="note">Déduits de l'écart entre deux déclarations successives : la date exacte de l'opération n'est pas publique.</p>
+            {% else %}<p class="empty">Aucun mouvement détecté.</p>{% endif %}
+        </section>
+
+        <section class="card">
+            <h2>Déports déclarés <a href="/signaux?scope={{ scope }}&type=deport">Le registre →</a></h2>
+            {% if data.deports %}
+            <div class="list">
+                {% for d in data.deports %}
+                <div>
+                    <span><a href="/personne/{{ d.pslug }}" style="color:var(--ink);font-weight:600">{{ d.prenom }} {{ d.nom }}</a>{% if d.group_code %} <span class="muted">({{ d.group_code }})</span>{% endif %} <span class="muted">· {{ d.date | date }}</span></span>
+                    <span class="small ink2">{{ (d.evidence.target or '') | truncate(110) }}</span>
+                    <span class="small muted">« {{ d.summary | truncate(150) }} »</span>
+                </div>
+                {% endfor %}
+            </div>
+            <p class="note">Un déport est la démarche inverse d'un conflit d'intérêts : l'élu signale lui-même qu'il ne prendra pas part au débat ou au vote.</p>
+            {% else %}<p class="empty">Aucun déport publié dans ce périmètre.</p>{% endif %}
+        </section>
+    </div>
+</div>
+
+<div class="grid g2">
+    <section class="card">
+        <h2>Sociétés les plus détenues <a href="/societes?scope={{ scope }}">Toutes →</a></h2>
+        {% set peak = data.companies[0].n if data.companies else 1 %}
+        <div class="bars" role="list">
+            {% for c in data.companies %}
+            <div class="bar-row" role="listitem" data-tip="{{ c.name }}&#10;{{ c.n }} détenteur{{ 's' if c.n > 1 }} · {{ c.total | eur }} déclarés{% if c.lobby %}&#10;Inscrite au répertoire des représentants d'intérêts{% endif %}">
+                <a class="lab" href="/societe/{{ c.slug }}">{{ c.name }}</a>
+                <div class="track"><div class="fill" style="width:{{ (100 * c.n / peak) | round(1) }}%"></div></div>
+                <span class="val">{{ c.n }} <span class="muted">· {{ c.total | eur }}</span></span>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="note">Nombre d'élus du périmètre déclarant une participation, et valeur cumulée déclarée.</p>
+    </section>
+
+    {% if data.heatmap %}
+    {% set hm = data.heatmap %}
+    <section class="card">
+        <h2>Qui est exposé à quel secteur</h2>
+        <div class="tbl-wrap">
+        <table class="heat">
+            <thead><tr><th class="row"></th>{% for s in hm.sectors %}<th scope="col"><span>{{ s.short }}</span></th>{% endfor %}</tr></thead>
+            <tbody>
+            {% for g in hm.groups %}
+            <tr>
+                <th class="row"><a class="grp" href="/groupe/{{ g.slug }}" style="--g:{{ g.color }};--gd:{{ g.color_dark }}"><span class="dot"></span>{{ g.code }}</a></th>
+                {% for s in hm.sectors %}{% set c = hm.cells[(g.id, s.slug)] %}
+                <td class="{{ 'h' ~ (1 + (5.999 * c.share / hm.peak) | int) if c.n else '' }}" data-tip="{{ g.label }} × {{ s.label }}&#10;{{ c.n }} membre{{ 's' if c.n > 1 }} sur {{ g.size }} ({{ (100 * c.share) | round | int }} %)&#10;{{ c.value | eur }} déclarés">{{ c.n or '' }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <div class="scale"><span>Part du groupe exposée : faible</span><i style="background:var(--seq-1)"></i><i style="background:var(--seq-2)"></i><i style="background:var(--seq-3)"></i><i style="background:var(--seq-4)"></i><i style="background:var(--seq-5)"></i><i style="background:var(--seq-6)"></i><span>forte</span><span>· le chiffre est le nombre d'élus</span></div>
+    </section>
+    {% else %}
+    <section class="card">
+        <h2>Textes les plus exposés <a href="/textes?exposes=1">Tous →</a></h2>
+        {% include "_bills_exposed.html" %}
+    </section>
+    {% endif %}
+</div>
+
+{% if data.heatmap %}
+<section class="card">
+    <h2>Textes les plus exposés <a href="/textes?exposes=1">Tous →</a></h2>
+    {% include "_bills_exposed.html" %}
+</section>
+{% endif %}
+{% endblock %}

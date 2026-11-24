@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Signaux — {{ scopes[scope][0] }}{% endblock %}
+{% block main %}
+<div class="page-head">
+    <div>
+        <h1>Signaux</h1>
+        <p class="lede">Chaque signal relie un intérêt déclaré à un acte public, avec de quoi le vérifier à la source. Le score sert à trier, pas à juger.</p>
+    </div>
+    {{ m.scope_tabs(scope, url_with) }}
+</div>
+
+<form class="filters" method="get" action="/signaux">
+    <input type="hidden" name="scope" value="{{ scope }}">
+    <div class="seg" role="group" aria-label="Niveau">
+        <a href="{{ url_with(niveau=None) }}" class="{{ 'on' if not filters.niveau }}">Tous</a>
+        {% for l in ('fort', 'moyen', 'faible', 'info') %}
+        <a href="{{ url_with(niveau=l) }}" class="{{ 'on' if filters.niveau == l }}">{{ m.level(l) }} <span class="muted">{{ facets.level.get(l, 0) }}</span></a>
+        {% endfor %}
+    </div>
+    {% if filters.niveau %}<input type="hidden" name="niveau" value="{{ filters.niveau }}">{% endif %}
+    <select name="type" aria-label="Type de signal">
+        <option value="">Tous les types</option>
+        <option value="votes" {{ 'selected' if filters.type == 'votes' }}>Tous les signaux liés à un vote</option>
+        <option value="liens" {{ 'selected' if filters.type == 'liens' }}>Tous les liens (activité, conjoint, collaborateur)</option>
+        {% for k, label in labels.SIGNAL_KINDS.items() %}{% if facets.kind.get(k) %}
+        <option value="{{ k }}" {{ 'selected' if filters.type == k }}>{{ label }} ({{ facets.kind[k] }})</option>
+        {% endif %}{% endfor %}
+    </select>
+    <select name="tri" aria-label="Tri">
+        <option value="score" {{ 'selected' if filters.tri == 'score' }}>Les plus forts d'abord</option>
+        <option value="date" {{ 'selected' if filters.tri == 'date' }}>Les plus récents d'abord</option>
+    </select>
+    <div class="grow"><input type="search" name="q" value="{{ filters.q }}" placeholder="Filtrer par nom, société, texte…" aria-label="Filtrer les signaux"></div>
+    <button class="btn" type="submit">Filtrer</button>
+</form>
+
+<p class="small" style="margin-bottom:10px">{{ m.vote_keys() }}</p>
+{% if rows %}
+<div class="signals">
+    {% for s in rows %}{{ m.signal(s) }}{% endfor %}
+</div>
+{{ m.pager(pg, url_with) }}
+{% else %}
+<div class="card"><p class="empty">Aucun signal ne correspond à ces filtres.</p></div>
+{% endif %}
+{% endblock %}

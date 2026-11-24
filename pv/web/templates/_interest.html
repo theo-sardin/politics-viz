@@ -1,0 +1,15 @@
+<div>
+    <span>
+        {% if it.person_name %}<strong>{{ it.person_name }}</strong>{% if it.org %} · {% endif %}{% endif %}
+        {% if it.org %}{% if it.slug %}<a href="/societe/{{ it.slug }}"><strong>{{ it.org }}</strong></a>{% else %}<strong>{{ it.org }}</strong>{% endif %}{% endif %}
+        {% if it.lobby %}<span class="chip" data-tip="Organisation inscrite au répertoire des représentants d'intérêts de la HATVP">lobby déclaré</span>{% endif %}
+        {% if it.kept %}<span class="chip strong" data-tip="Activité déclarée comme conservée pendant le mandat">conservée</span>{% endif %}
+    </span>
+    {% if it.description %}<span class="small ink2">{{ it.description }}</span>{% endif %}
+    {% if it.start_date or it.end_date or it.pay %}
+    <span class="small muted">
+        {% if it.start_date %}{{ it.start_date | date }}{% endif %}{% if it.start_date or it.end_date %} → {{ (it.end_date | date) if it.end_date else 'en cours' }}{% endif %}
+        {% if it.pay %}{% set last = it.pay[-1] %} · {{ last[1] | eur }} {{ (it.pay_basis or '') | lower }} en {{ last[0] }}{% if it.pay_max and it.pay_max > last[1] %} (jusqu'à {{ it.pay_max | eur }}){% endif %}{% endif %}
+    </span>
+    {% endif %}
+</div>

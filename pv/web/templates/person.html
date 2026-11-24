@@ -1,0 +1,209 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ p.prenom }} {{ p.nom }}{% endblock %}
+{% block main %}
+{% set flagged = p.signals | rejectattr('level', 'equalto', 'info') | list %}
+<p class="crumb"><a href="/elus?scope={{ p.chamber if p.active and p.chamber in scopes else 'tous' }}">{{ labels.CHAMBERS.get(p.chamber, 'Déclarants') }}</a>{% if p.group_code %} › <a href="/groupe/{{ p.group_slug }}">{{ p.group_label }}</a>{% endif %}</p>
+
+<div class="profile">
+    {{ m.avatar(p, lg=True) }}
+    <div>
+        <h1>{{ p.prenom }} {{ p.nom }} {{ m.level(p.level) }}</h1>
+        <div class="meta">
+            {% if p.role %}<span>{{ p.role }}{% if not p.active and p.chamber in ('an', 'senat', 'gouv') %} (mandat terminé){% endif %}</span>{% endif %}
+            {{ m.grp(p) }}
+            {% if p.committee %}<span>{{ p.committee }}</span>{% endif %}
+            {% if p.profession %}<span class="muted">{{ p.profession }}</span>{% endif %}
+        </div>
+        <div class="meta">
+            {% if p.hatvp_slug %}<a href="{{ hatvp_base }}/pages_nominatives/{{ p.hatvp_slug }}" target="_blank" rel="noopener">Fiche HATVP ↗</a>{% endif %}
+            {% if p.an_id and p.chamber == 'an' %}<a href="{{ an_base }}/dyn/deputes/{{ p.an_id }}" target="_blank" rel="noopener">Fiche Assemblée ↗</a>{% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="tiles">
+    <div class="tile">
+        <div class="l">Participations déclarées</div>
+        <div class="v">{{ p.portfolio_eur | eur if p.n_holdings else '—' }}</div>
+        <div class="s">{% if p.current %}{{ p.n_holdings }} ligne{{ 's' if p.n_holdings != 1 }} · déclaration du {{ p.current.filed_at | date }}{% else %}aucune déclaration d'intérêts publiée{% endif %}</div>
+    </div>
+    <div class="tile">
+        <div class="l">Signaux</div>
+        <div class="v">{{ flagged | length }}</div>
+        <div class="s">{% for l in ('fort', 'moyen', 'faible') %}{% set n = flagged | selectattr('level', 'equalto', l) | list | length %}{% if n %}{{ m.level(l) }} {{ n }} &nbsp; {% endif %}{% endfor %}{% if not flagged %}aucun rapprochement à signaler{% endif %}</div>
+    </div>
+    {% if p.vote_stats and p.vote_stats.n %}
+    <div class="tile">
+        <div class="l">Scrutins publics</div>
+        <div class="v">{{ p.vote_stats.n | intfr }}</div>
+        <div class="s">{{ m.votebar(p.vote_stats.pour, p.vote_stats.contre, p.vote_stats.abst) }} · {{ p.vote_stats.dissent or 0 }} à rebours du groupe</div>
+    </div>
+    {% endif %}
+    <div class="tile">
+        <div class="l">Déclarations</div>
+        <div class="v">{{ p.declarations | length }}</div>
+        <div class="s">{% if p.declarations %}de {{ p.declarations[0].filed_at | date }} à {{ p.declarations[-1].filed_at | date }}{% else %}aucune publiée{% endif %}</div>
+    </div>
+</div>
+
+{% if p.pending %}
+<div class="banner">Déclaration déposée le {{ p.pending[0].filed | date }}, pas encore publiée par la HATVP : ce qui suit peut ne plus être à jour.</div>
+{% endif %}
+
+    {% if p.lines %}
+    <section class="card">
+        <h2>Participations, déclaration après déclaration</h2>
+        <div class="tbl-wrap">
+        <table class="matrix">
+            <thead>
+                <tr>
+                    <th>Société</th>
+                    {% for d in p.series %}
+                    <th class="num">{{ d.filed_at | date }}
+                        <span class="doc">{% if d.source_file %}<a href="{{ hatvp_files }}{{ d.source_file }}.pdf" target="_blank" rel="noopener">{{ d.doc_type }}{{ ' modif.' if d.is_modification }} ↗</a>{% else %}{{ d.doc_type }}{% if d.status == 'archived' %} · archivée{% endif %}{% endif %}</span>
+                    </th>
+                    {% endfor %}
+                </tr>
+            </thead>
+            <tbody>
+            {% for l in p.lines %}
+            <tr>
+                <td>{% if l.slug %}<a href="/societe/{{ l.slug }}">{{ l.name }}</a>{% else %}{{ l.name }}{% endif %}
+                    {% if l.kind == 'listed' %}<span class="chip">cotée</span>{% elif l.kind == 'coop_bank' %}<span class="chip">mutualiste</span>{% elif l.kind == 'fund' %}<span class="chip">fonds</span>{% endif %}</td>
+                {% for d in p.series %}{% set c = l.cells.get(d.id) %}
+                {% if c and c.value is not none %}
+                <td class="cell" data-tip="{{ l.name }} · {{ d.filed_at | date }}&#10;{{ c.value | eur }}{% if c.shares %} · {{ c.shares | intfr }} titres{% endif %}{% if c.pct %} · {{ c.pct | pct }} du capital{% endif %}{% if c.n > 1 %}&#10;{{ c.n }} lignes regroupées{% endif %}{% if c.change %}&#10;{{ labels.CHANGES[c.change] }} (établi sur : {{ labels.CHANGE_BASIS[c.basis] }}){% endif %}">
+                    {% if c.change %}<span class="chg chg-{{ c.change }}"><span class="sr">{{ labels.CHANGES[c.change] }}</span></span>{% endif %}{{ c.value | eur }}
+                    {% if c.shares %}<span class="q">{{ c.shares | intfr }} titres</span>{% endif %}
+                </td>
+                {% elif c and c.change == 'sortie' %}
+                <td class="gone" data-tip="{{ l.name }} ne figure plus dans la déclaration du {{ d.filed_at | date }}"><span class="chg chg-sortie">Sortie</span></td>
+                {% else %}
+                <td class="gone">·</td>
+                {% endif %}
+                {% endfor %}
+            </tr>
+            {% endfor %}
+            </tbody>
+            <tfoot>
+                <tr><td>Total déclaré</td>{% for d in p.series %}<td class="num">{{ p.totals.get(d.id, 0) | eur }}</td>{% endfor %}</tr>
+            </tfoot>
+        </table>
+        </div>
+        <p class="note">Valeurs et nombres de titres tels que déclarés. <span class="chg chg-entree"></span>ligne nouvelle ou renforcée, <span class="chg chg-sortie"></span>ligne allégée ou disparue par rapport à la déclaration précédente. Une valeur qui change à nombre de titres constant reflète le cours, pas une opération.</p>
+    </section>
+    {% elif p.current %}
+    <section class="card">
+        <h2>Participations</h2>
+        <p class="empty">Aucune participation financière dans les déclarations publiées{% if p.current.no_holdings %} (rubrique déclarée « néant »){% endif %}.</p>
+    </section>
+    {% endif %}
+
+<div class="grid g-side">
+<div class="stack">
+    {% if p.signals %}
+    <section class="card">
+        <h2>Signaux <span class="small" style="text-transform:none;letter-spacing:0;font-weight:400">{{ m.vote_keys() }}</span></h2>
+        <div class="signals">
+            {% for s in p.signals[:6] %}{{ m.signal(s, show_person=False) }}{% endfor %}
+        </div>
+        {% if p.signals | length > 6 %}
+        <details style="margin-top:10px"><summary class="small">Voir les {{ p.signals | length - 6 }} autres</summary>
+            <div class="signals" style="margin-top:10px">{% for s in p.signals[6:] %}{{ m.signal(s, show_person=False) }}{% endfor %}</div>
+        </details>
+        {% endif %}
+    </section>
+    {% endif %}
+
+    {% set order = ['dirigeant', 'conseil', 'activite', 'conjoint', 'collaborateur', 'benevole', 'mandat'] %}
+    {% for kind in order %}{% set items = p.interests.get(kind) %}{% if items %}
+    <section class="card">
+        <h2>{{ labels.INTEREST_KINDS[kind] }} <span class="muted" style="font-weight:400">{{ items | length }}</span></h2>
+        <div class="list">
+            {% for it in items[:8] %}{% include "_interest.html" %}{% endfor %}
+        </div>
+        {% if items | length > 8 %}
+        <details><summary class="small">Voir les {{ items | length - 8 }} autres</summary><div class="list">{% for it in items[8:] %}{% include "_interest.html" %}{% endfor %}</div></details>
+        {% endif %}
+    </section>
+    {% endif %}{% endfor %}
+</div>
+
+<div class="stack">
+    {% if p.bills %}
+    <section class="card">
+        <h2>Textes votés</h2>
+        <div class="list">
+            {% for b in p.bills %}
+            <div>
+                <span><a href="/texte/{{ b.slug }}">{{ b.short }}</a> {{ m.level(b.level) }}</span>
+                <span class="small muted">{{ m.votebar(b.n_pour, b.n_contre, b.n_abst) }} {{ b.n_votes }} scrutin{{ 's' if b.n_votes > 1 }}{% if b.n_dissent %} · {{ b.n_dissent }} à rebours du groupe{% endif %}{% if b.roles %} · {{ b.roles | replace(',', ', ') }}{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="note">Les textes liés à un signal d'abord, puis ceux sur lesquels l'élu a le plus voté.</p>
+    </section>
+    {% endif %}
+
+    {% if p.deports %}
+    <section class="card">
+        <h2>Déports déclarés</h2>
+        <div class="list">
+            {% for d in p.deports %}
+            <div>
+                <span>{% if d.bill_slug %}<a href="/texte/{{ d.bill_slug }}">{{ d.target | truncate(110) }}</a>{% else %}{{ d.target | truncate(110) }}{% endif %}</span>
+                <span class="small ink2">« {{ d.reason or 'Motif non précisé' }} »</span>
+                <span class="small muted">{{ d.date | date }}{% if d.scope %} · {{ d.scope }}{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if p.wealth %}
+    {% set wl = {'immobilier': 'Biens immobiliers', 'compte': 'Comptes bancaires', 'assurance_vie': 'Assurances-vie', 'compte_titres': 'Comptes-titres et PEA', 'non_cotee': 'Valeurs non cotées', 'sci': 'Parts de SCI', 'vehicule': 'Véhicules', 'bien_divers': 'Biens divers', 'autre_bien': 'Autres biens', 'etranger': "Biens à l'étranger", 'fonds': 'Fonds de commerce, clientèles', 'dette': 'Dettes'} %}
+    <section class="card">
+        <h2>Patrimoine déclaré</h2>
+        <table>
+            <tbody>
+            {% for kind, g in p.wealth.groups.items() %}
+            <tr data-tip="{{ wl.get(kind, kind) }}{% for a in g['items'][:8] %}&#10;{{ a.label or '—' }} : {{ a.value_eur | eur }}{% endfor %}">
+                <td>{{ wl.get(kind, kind) }} <span class="muted small">{{ g['items'] | length }}</span></td>
+                <td class="num">{{ g.total | eur }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+            <tfoot><tr><td><strong>Net déclaré</strong></td><td class="num"><strong>{{ p.wealth.net | eur }}</strong></td></tr></tfoot>
+        </table>
+        <p class="note">Déclaration de situation patrimoniale du {{ p.wealth.decl.filed_at | date }}. Seules celles des membres du Gouvernement sont publiées ; celles des parlementaires ne sont consultables qu'en préfecture.</p>
+    </section>
+    {% endif %}
+
+    {% if p.memberships %}
+    <section class="card">
+        <h2>Commissions et groupes d'études</h2>
+        <div class="chips">
+            {% for mb in p.memberships[:18] %}<span class="chip{{ ' strong' if mb.kind == 'COMPER' }}" data-tip="{{ mb.label }}{% if mb.role %}&#10;{{ mb.role }}{% endif %}">{{ mb.label | truncate(46) }}</span>{% endfor %}
+            {% if p.memberships | length > 18 %}<span class="muted small">+ {{ p.memberships | length - 18 }}</span>{% endif %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="card">
+        <h2>Déclarations à la HATVP</h2>
+        {% if p.declarations %}
+        <div class="list">
+            {% for d in p.declarations | reverse %}
+            <div>
+                <span>{% if d.source_file %}<a href="{{ hatvp_files }}{{ d.source_file }}.pdf" target="_blank" rel="noopener">{{ labels.DOC_TYPES.get(d.doc_type, d.doc_type) }}{{ ' modificative' if d.is_modification }} ↗</a>{% else %}{{ labels.DOC_TYPES.get(d.doc_type, d.doc_type) }}{% endif %}</span>
+                <span class="small muted">déposée le {{ d.filed_at | date }}{% if d.mandate_label %} · {{ d.mandate_label | truncate(60) }}{% endif %}{% if d.status == 'archived' %} · retirée du site de la HATVP, conservée en archive{% endif %}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}<p class="empty">Aucune déclaration publiée à ce jour.</p>{% endif %}
+        {% for f in p.pending %}<p class="note">Dépôt du {{ f.filed | date }} en attente de publication.</p>{% endfor %}
+    </section>
+</div>
+</div>
+{% endblock %}

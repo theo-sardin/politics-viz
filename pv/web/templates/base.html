@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="fr">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Radar des intérêts{% endblock %} · politics-viz</title>
+    <meta name="description" content="Participations, activités et votes des responsables publics français, croisés à partir des données ouvertes de la HATVP, de l'Assemblée nationale et du Sénat.">
+    <script>
+    /* Apply a saved theme before first paint. */
+    (function () {
+        try {
+            var t = new URLSearchParams(location.search).get("theme") || localStorage.getItem("pv-theme");
+            if (t === "dark" || t === "light") document.documentElement.dataset.theme = t;
+        } catch (e) {}
+    })();
+    </script>
+    <link rel="stylesheet" href="{{ url_for('static', path='style.css') }}?v={{ asset_version }}">
+</head>
+<body>
+<header class="site">
+    <div class="wrap">
+        <a class="brand" href="/?scope={{ scope }}">politics<span>·</span>viz</a>
+        <nav class="main" aria-label="Navigation principale">
+            {% set nav = [('/', 'Radar'), ('/signaux', 'Signaux'), ('/mouvements', 'Mouvements'), ('/elus', 'Élus'), ('/societes', 'Sociétés'), ('/textes', 'Textes'), ('/reseau', 'Réseau'), ('/methode', 'Méthode')] %}
+            {% for href, label in nav %}
+            <a href="{{ href }}{% if href not in ('/methode', '/textes') %}?scope={{ scope }}{% endif %}" class="{{ 'on' if (href == '/' and path == '/') or (href != '/' and path.startswith(href)) }}">{{ label }}</a>
+            {% endfor %}
+        </nav>
+        <div class="search" role="search">
+            <input type="search" id="q" placeholder="Élu, société, texte…" autocomplete="off" aria-label="Rechercher un élu, une société ou un texte" aria-controls="q-results">
+            <div class="search-results" id="q-results" role="listbox"></div>
+        </div>
+        <button class="theme" id="theme" type="button" aria-label="Basculer entre thème clair et sombre" data-tip="Thème clair / sombre">◐</button>
+    </div>
+</header>
+<main>
+    <div class="wrap">
+    {% block main %}{% endblock %}
+    </div>
+</main>
+<footer class="site">
+    <div class="wrap">
+        <p>Un signal est une coïncidence documentée entre un intérêt déclaré et un acte public — jamais la preuve d'une faute. <a href="/methode">Méthode et limites</a>.</p>
+        <p>Sources : HATVP (déclarations et répertoire des représentants d'intérêts), Assemblée nationale, Sénat — licence ouverte.
+        {% if fresh and fresh.last_declaration %}Dernière déclaration publiée : {{ fresh.last_declaration | date }} · dernier scrutin : {{ fresh.last_vote | date }}.{% endif %}</p>
+    </div>
+</footer>
+<div id="tip" role="tooltip"></div>
+<script src="{{ url_for('static', path='app.js') }}?v={{ asset_version }}" defer></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

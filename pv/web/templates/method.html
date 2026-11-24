@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Méthode et limites{% endblock %}
+{% block main %}
+<div class="page-head">
+    <div>
+        <h1>Méthode et limites</h1>
+        <p class="lede">Ce site ne révèle rien qui ne soit déjà public. Il rapproche des fichiers que l'on consulte d'ordinaire séparément, et dit toujours sur quoi repose un rapprochement.</p>
+    </div>
+</div>
+
+<div class="grid g-side">
+<div class="card prose">
+    <h2>Ce qu'est un signal</h2>
+    <p>Un signal est une <strong>coïncidence documentée</strong> entre un intérêt déclaré par un responsable public et un acte public : un vote, un rôle de rapporteur, un siège en commission, un portefeuille ministériel. Ce n'est ni une accusation ni la preuve d'un conflit d'intérêts. Détenir des actions et voter une loi qui touche leur secteur est légal ; la question que pose le droit est celle de la transparence et, parfois, du déport.</p>
+    <p>Chaque signal renvoie à la déclaration et aux scrutins d'origine. Le score, de 0 à 100, sert uniquement à trier : il dit ce qui mérite d'être lu en premier.</p>
+
+    <h2>Ce qui relie un intérêt à un texte</h2>
+    <ul>
+        <li><strong>Société nommée dans le texte.</strong> L'intitulé du texte cite la société (par exemple une proposition de nationalisation). C'est le lien le plus direct.</li>
+        <li><strong>Lobbying déclaré sur ce texte.</strong> La société, ou une entité qui lui est rattachée, a déclaré à la HATVP une action de représentation d'intérêts dont l'objet mentionne le texte. L'objet déclaré est cité : lisez-le.</li>
+        <li><strong>Même secteur.</strong> La société et le texte relèvent du même secteur économique. C'est le lien le plus lâche ; il ne compte qu'au-delà de 10 000 € déclarés (50 000 € pour une SCI ou une structure agricole personnelle, 30 000 € pour des parts de banque mutualiste).</li>
+    </ul>
+    <p>Les lois de finances et les textes fourre-tout ne produisent aucun lien sectoriel ni lien de lobbying : tout le monde y a un intérêt, donc cela ne distingue personne. Le budget de la sécurité sociale est traité comme un texte de santé et d'assurance, avec un poids réduit.</p>
+
+    <h2>Les types de signaux</h2>
+    <ul>
+        {% for k, label in labels.SIGNAL_KINDS.items() %}<li><strong>{{ labels.SIGNAL_SHORT[k] }}.</strong> {{ label }}.</li>{% endfor %}
+    </ul>
+
+    <h2>Comment le score est construit</h2>
+    <ul>
+        <li>Une base selon la nature du lien : participation dans une société nommée (42), visée par du lobbying déclaré (32) ou du même secteur (18 ; 12 pour une structure personnelle). Les liens par une activité, le conjoint ou un collaborateur ont leur propre base.</li>
+        <li>Le montant déclaré ajoute jusqu'à 24 points sur une échelle logarithmique (8 à 10 000 €, 16 à 100 000 €, 24 à partir d'un million).</li>
+        <li>Un mouvement de titres dans les six mois autour des votes ajoute jusqu'à 18 points ; un rôle de rapporteur, 15 ; des votes à rebours de son propre groupe, jusqu'à 10.</li>
+        <li>{{ m.level('fort') }} à partir de 52, {{ m.level('moyen') }} à partir de 40, {{ m.level('faible') }} à partir de 28. En dessous, rien n'est affiché. Les déports sont listés à part, comme élément de transparence.</li>
+    </ul>
+
+    <h2>Les mouvements de titres</h2>
+    <p>La France n'impose pas aux élus de déclarer leurs achats et ventes au fil de l'eau, contrairement aux États-Unis. La HATVP reçoit des photographies : une déclaration initiale, puis une déclaration modificative dans les deux mois suivant tout changement substantiel. Chaque déclaration reprend l'ensemble des participations, avec le nombre de titres et leur valeur.</p>
+    <p>Un mouvement est donc déduit de l'écart entre deux déclarations successives d'une même personne. On connaît la fenêtre, pas le jour. Le nombre de titres fait foi : une valeur qui varie à nombre de titres constant reflète le cours, pas une opération. Quand le nombre de titres manque, seule une variation de valeur de plus de 60 % est retenue, et elle est signalée comme moins sûre. Cinq lignes ou plus qui changent d'un coup sont regroupées : c'est souvent une déclaration complétée après coup ou un portefeuille sous mandat de gestion.</p>
+
+    <h2>Ce que les données ne permettent pas</h2>
+    <ul>
+        <li><strong>Le patrimoine des parlementaires n'est pas publié.</strong> Leur déclaration de situation patrimoniale n'est consultable qu'en préfecture, et la reproduire est interdit. Seules les déclarations d'intérêts sont en ligne ; pour les membres du Gouvernement, le patrimoine l'est aussi.</li>
+        <li><strong>Les proches ne déclarent rien.</strong> On connaît l'employeur et la profession du conjoint, pas ses avoirs. Aucune donnée publique ne décrit les opérations d'un membre de la famille.</li>
+        <li><strong>Les noms sont saisis à la main.</strong> « Total », « TotalEnergies SE » et « PEA Total » sont rapprochés par un référentiel de {{ counts.registry }} sociétés. Hors de ce référentiel, deux sociétés homonymes peuvent être confondues ; les SCI et structures dont le nom est occulté par la HATVP ne sont jamais rapprochées entre elles.</li>
+        <li><strong>Le secteur d'un texte est déduit de son intitulé.</strong> Un amendement précis peut concerner un tout autre sujet que le texte qui le porte.</li>
+        <li><strong>Seuls les scrutins publics de l'Assemblée nationale sont pris en compte</strong>, depuis 2022. Les votes à main levée, les travaux en commission et les scrutins du Sénat ne le sont pas.</li>
+        <li><strong>Le lobbying déclaré est publié avec un an de décalage</strong> : les actions de l'année en cours n'apparaissent qu'au printemps suivant.</li>
+        <li><strong>Une déclaration peut être inexacte ou incomplète.</strong> Ce site reprend ce qui a été déclaré, pas ce qui est.</li>
+    </ul>
+
+    <h2>Déclarations retirées</h2>
+    <p>La HATVP cesse de publier une déclaration une fois le mandat terminé. {{ counts.archived | intfr }} déclarations collectées avant leur retrait sont conservées ici pour permettre les comparaisons dans le temps ; elles sont signalées comme archivées et ne renvoient plus vers un document en ligne.</p>
+</div>
+
+<div class="stack">
+    <section class="card">
+        <h2>Sources</h2>
+        <div class="list">
+            {% for s in fresh.sources %}
+            <div>
+                <a href="{{ s.url }}" target="_blank" rel="noopener">{{ s.label }} ↗</a>
+                <span class="small muted">{{ s.date or 'non téléchargée' }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        <p class="note">Données sous licence ouverte Etalab. Dernière reconstruction de la base : {{ (fresh.synced_at or '')[:16] | replace('T', ' à ') }} UTC.</p>
+    </section>
+    <section class="card">
+        <h2>Volumes</h2>
+        <dl class="kv">
+            <dt>Personnes</dt><dd class="num">{{ counts.person | intfr }}</dd>
+            <dt>Déclarations</dt><dd class="num">{{ counts.declaration | intfr }}</dd>
+            <dt>Participations déclarées</dt><dd class="num">{{ counts.holding | intfr }}</dd>
+            <dt>Activités, mandats, liens</dt><dd class="num">{{ counts.interest | intfr }}</dd>
+            <dt>Représentants d'intérêts</dt><dd class="num">{{ counts.lobby_org | intfr }}</dd>
+            <dt>Actions de lobbying</dt><dd class="num">{{ counts.lobby_action | intfr }}</dd>
+            <dt>Textes</dt><dd class="num">{{ counts.bill | intfr }}</dd>
+            <dt>Scrutins publics</dt><dd class="num">{{ counts.scrutin | intfr }}</dd>
+            <dt>Votes individuels</dt><dd class="num">{{ counts.vote | intfr }}</dd>
+            <dt>Mouvements de titres</dt><dd class="num">{{ counts.position_change | intfr }}</dd>
+            <dt>Signaux</dt><dd class="num">{{ counts.signal | intfr }}</dd>
+        </dl>
+    </section>
+</div>
+</div>
+{% endblock %}

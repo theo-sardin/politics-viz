@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ c.name }}{% endblock %}
+{% block main %}
+{% set spend = c.lobby_years | selectattr('spend_max') | list %}
+<p class="crumb"><a href="/societes">Sociétés</a></p>
+<div class="page-head">
+    <div>
+        <h1>{{ c.name }}</h1>
+        <div class="chips" style="margin-top:8px">
+            <span class="chip strong">{{ labels.COMPANY_KINDS[c.kind] }}{% if c.ticker %} · {{ c.ticker }}{% endif %}</span>
+            {% for s in c.sectors %}<a class="chip" href="/societes?secteur={{ s.slug }}&scope=tous">{{ s.label }}</a>{% endfor %}
+            {% if c.lobby_orgs %}<span class="chip" data-tip="{{ c.lobby_orgs | length }} entité{{ 's' if c.lobby_orgs | length > 1 }} inscrite{{ 's' if c.lobby_orgs | length > 1 }} au répertoire des représentants d'intérêts">Lobbying déclaré</span>{% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="tiles">
+    <div class="tile">
+        <div class="l">Détenteurs actuels</div>
+        <div class="v">{{ c.holders | length }}</div>
+        <div class="s">{% if c.past_holders > 0 %}{{ c.past_holders }} autre{{ 's' if c.past_holders > 1 }} par le passé{% else %}dans leur dernière déclaration{% endif %}</div>
+    </div>
+    <div class="tile">
+        <div class="l">Valeur déclarée</div>
+        <div class="v">{{ c.holders | sum(attribute='value') | eur if c.holders else '—' }}</div>
+        <div class="s">cumul des dernières déclarations</div>
+    </div>
+    {% if c.lobby_orgs %}
+    <div class="tile">
+        <div class="l">Dépenses de lobbying déclarées</div>
+        <div class="v">{% if spend %}{{ spend[-1].spend_min | eur }} – {{ spend[-1].spend_max | eur }}{% else %}—{% endif %}</div>
+        <div class="s">{% if spend %}exercice {{ spend[-1].year }}{% else %}montant non publié{% endif %} · {{ c.lobby_orgs | sum(attribute='n_actions') }} actions déclarées</div>
+    </div>
+    {% endif %}
+    <div class="tile">
+        <div class="l">Signaux</div>
+        <div class="v">{{ c.n_signals }}</div>
+        <div class="s">impliquant cette société</div>
+    </div>
+</div>
+
+<div class="grid g-side">
+<div class="stack">
+    <section class="card">
+        <h2>Qui en détient</h2>
+        {% if c.holders %}
+        <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>Nom</th><th class="num">Valeur déclarée</th><th class="num">Titres</th><th class="num">Capital</th><th>Déclarée depuis</th></tr></thead>
+            <tbody>
+            {% for h in c.holders %}
+            <tr>
+                <td>{{ m.who(h) }}</td>
+                <td class="num">{{ h.value | eur }}</td>
+                <td class="num">{{ h.shares | intfr if h.shares else '—' }}</td>
+                <td class="num">{{ h.pct | pct if h.pct else '—' }}</td>
+                <td class="nowrap muted">{{ h.since | date }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}<p class="empty">Aucune personne suivie ne déclare actuellement de participation dans cette société.</p>{% endif %}
+    </section>
+
+    {% if c.signals %}
+    <section class="card">
+        <h2>Signaux impliquant {{ c.name }} <span class="small" style="text-transform:none;letter-spacing:0;font-weight:400">{{ m.vote_keys() }}</span></h2>
+        <div class="signals">{% for s in c.signals %}{{ m.signal(s) }}{% endfor %}</div>
+        {% if c.n_signals > c.signals | length %}<p class="note">{{ c.n_signals - c.signals | length }} autres signaux dans la <a href="/signaux?scope=tous&q={{ c.name | urlencode }}">liste complète</a>.</p>{% endif %}
+    </section>
+    {% endif %}
+
+    {% if c.moves %}
+    <section class="card">
+        <h2>Mouvements sur ce titre</h2>
+        <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>Élu</th><th>Mouvement</th><th class="num">Titres</th><th class="num">Valeur déclarée</th><th>Entre les déclarations du</th></tr></thead>
+            <tbody>{{ m.move_rows(c.moves, show_company=False) }}</tbody>
+        </table>
+        </div>
+    </section>
+    {% endif %}
+
+    {% if c.interests %}
+    <section class="card">
+        <h2>Autres liens déclarés</h2>
+        <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>Nom</th><th>Lien</th><th>Précision</th></tr></thead>
+            <tbody>
+            {% for i in c.interests %}
+            <tr>
+                <td>{{ m.who(i) }}</td>
+                <td class="nowrap">{{ labels.RELATIONS.get(i.rel, i.rel) }}{% if i.kept %} <span class="chip strong">conservée</span>{% endif %}</td>
+                <td class="small ink2">{{ (i.description or i.org or '') | truncate(90) }}{% if i.end_date %} <span class="muted">· jusqu'en {{ i.end_date | date }}</span>{% endif %}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <p class="note">Employeur, client, mandat social, employeur du conjoint ou d'un collaborateur, tels que déclarés à la HATVP.</p>
+    </section>
+    {% endif %}
+</div>
+
+<div class="stack">
+    {% if c.by_group and c.holders | length > 1 %}
+    <section class="card">
+        <h2>Détenteurs par groupe</h2>
+        {% set peak = c.by_group[0].n %}
+        <div class="bars" role="list">
+            {% for g in c.by_group %}
+            <div class="bar-row" role="listitem" data-tip="{{ g.label }}&#10;{{ g.n }} détenteur{{ 's' if g.n > 1 }} · {{ g.value | eur }}">
+                <span class="lab">{% if g.slug %}<a class="grp" href="/groupe/{{ g.slug }}" style="--g:{{ g.color }};--gd:{{ g.color_dark }}"><span class="dot"></span>{{ g.label }}</a>{% else %}<span class="grp"><span class="dot"></span>{{ g.label }}</span>{% endif %}</span>
+                <div class="track"><div class="fill g" style="width:{{ (100 * g.n / peak) | round(1) }}%;{% if g.color %}--g:{{ g.color }};--gd:{{ g.color_dark }}{% endif %}"></div></div>
+                <span class="val">{{ g.n }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if c.named_bills %}
+    <section class="card">
+        <h2>Textes qui nomment cette société</h2>
+        <div class="list">
+            {% for b in c.named_bills %}<div><a href="/texte/{{ b.slug }}">{{ b.title }}</a><span class="small muted">{{ b.n_scrutins }} scrutins · dernier vote le {{ b.last_vote | date }}</span></div>{% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if c.lobby_orgs %}
+    <section class="card">
+        <h2>Lobbying déclaré</h2>
+        {% if spend %}
+        {% set peak = spend | map(attribute='spend_max') | max %}
+        <div class="bars" role="list" aria-label="Dépenses de représentation d'intérêts par exercice">
+            {% for y in c.lobby_years %}{% if y.spend_max %}
+            <div class="bar-row" role="listitem" style="grid-template-columns:44px 1fr auto" data-tip="Exercice {{ y.year }}&#10;Entre {{ y.spend_min | eur }} et {{ y.spend_max | eur }}&#10;{{ y.n_actions }} actions déclarées">
+                <span class="lab muted">{{ y.year }}</span>
+                <div class="track"><div class="fill" style="width:{{ (100 * y.spend_max / peak) | round(1) }}%"></div></div>
+                <span class="val">{{ y.spend_max | eur }}</span>
+            </div>
+            {% endif %}{% endfor %}
+        </div>
+        <p class="note">Borne haute de la fourchette de dépenses déclarée chaque année{% if c.lobby_orgs | length > 1 %}, cumulée sur {{ c.lobby_orgs | length }} entités{% endif %}.</p>
+        {% endif %}
+        {% if c.lobby_bills %}
+        <h3 style="margin:14px 0 4px;font-size:0.9rem">Textes mentionnés dans ses déclarations</h3>
+        <div class="list">
+            {% for b in c.lobby_bills %}
+            <div>
+                <a href="/texte/{{ b.slug }}">{{ b.short }}</a>
+                {% if b.sample %}<span class="small muted">« {{ b.sample | truncate(140) }} »</span>{% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% elif c.lobby_actions %}
+        <h3 style="margin:14px 0 4px;font-size:0.9rem">Dernières actions déclarées</h3>
+        <div class="list">
+            {% for a in c.lobby_actions[:6] %}<div><span class="small ink2">« {{ a.subject | truncate(160) }} »</span><span class="small muted">{{ a.year }} · {{ a.org }}</span></div>{% endfor %}
+        </div>
+        {% endif %}
+        <p class="note">Source : répertoire des représentants d'intérêts de la HATVP ({% for o in c.lobby_orgs[:3] %}{{ o.name }}{{ ', ' if not loop.last }}{% endfor %}{% if c.lobby_orgs | length > 3 %}…{% endif %}).</p>
+    </section>
+    {% endif %}
+</div>
+</div>
+{% endblock %}

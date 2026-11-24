@@ -1,0 +1,145 @@
+{# Shared building blocks. Every page imports from here so a person, a level
+   or a vote tally looks the same everywhere. #}
+
+{% macro gstyle(r) -%}
+{% if r.group_color %}--g:{{ r.group_color }};--gd:{{ r.group_color_dark }}{% endif %}
+{%- endmacro %}
+
+{% macro avatar(r, lg=False) -%}
+{% if r.photo_url -%}
+<img class="avatar{{ ' lg' if lg }}" src="{{ r.photo_url }}" alt="" loading="lazy" referrerpolicy="no-referrer" style="{{ gstyle(r) }}" data-i="{{ r.prenom[:1] }}{{ r.nom[:1] }}" onerror="var s=document.createElement('span');s.className=this.className+' ph';s.style.cssText=this.style.cssText;s.textContent=this.dataset.i;this.replaceWith(s)">
+{%- else -%}
+<span class="avatar ph{{ ' lg' if lg }}" style="{{ gstyle(r) }}" aria-hidden="true">{{ r.prenom[:1] }}{{ r.nom[:1] }}</span>
+{%- endif %}
+{%- endmacro %}
+
+{% macro grp(r) -%}
+{% if r.group_code %}<a class="grp" href="/groupe/{{ r.group_slug }}" style="{{ gstyle(r) }}" data-tip="{{ r.group_label }}"><span class="dot"></span>{{ r.group_code }}</a>{% endif %}
+{%- endmacro %}
+
+{% macro who(r, role=True) -%}
+<a class="who" href="/personne/{{ r.pslug }}">{{ avatar(r) }}<span style="min-width:0"><span class="n">{{ r.prenom }} {{ r.nom }}</span>{% if role %}<span class="r">{% if r.group_code %}{{ r.group_code }} · {% endif %}{{ r.role or labels.CHAMBERS.get(r.chamber, '') }}</span>{% endif %}</span></a>
+{%- endmacro %}
+
+{% macro level(l) -%}
+{% if l %}<span class="lvl lvl-{{ l }}"><i aria-hidden="true">{{ {'fort': '▲', 'moyen': '◆', 'faible': '●', 'info': '◇'}[l] }}</i>{{ labels.LEVELS[l] }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro votebar(pour, contre, abst) -%}
+{% set n = (pour or 0) + (contre or 0) + (abst or 0) %}
+{% if n %}<span class="votebar" role="img" aria-label="{{ pour }} pour, {{ contre }} contre, {{ abst }} abstention" data-tip="{{ n }} scrutin{{ 's' if n > 1 }}&#10;{{ pour or 0 }} pour · {{ contre or 0 }} contre · {{ abst or 0 }} abstention">{% if pour %}<i class="p" style="flex:{{ pour }}"></i>{% endif %}{% if contre %}<i class="c" style="flex:{{ contre }}"></i>{% endif %}{% if abst %}<i class="a" style="flex:{{ abst }}"></i>{% endif %}</span>{% endif %}
+{%- endmacro %}
+
+{% macro vote_keys() -%}
+<span class="key" style="--k:var(--pour)">Pour</span><span class="key" style="--k:var(--contre)">Contre</span><span class="key" style="--k:var(--abst)">Abstention</span>
+{%- endmacro %}
+
+{% macro decl_link(d, text=None) -%}
+{% if d and d.file %}<a href="{{ hatvp_files }}{{ d.file }}.pdf" rel="noopener" target="_blank">{{ text or ('Déclaration du ' ~ (d.filed | date)) }} ↗</a>{% elif d %}{{ text or ('Déclaration du ' ~ (d.filed | date)) }}{% if d.status == 'archived' %} (retirée du site HATVP){% endif %}{% endif %}
+{%- endmacro %}
+
+{% macro trade_chip(t) -%}
+<span class="chip" data-tip="{{ labels.CHANGES[t.kind] }} · {{ t.company.name }}&#10;Entre les déclarations du {{ t.from | date }} et du {{ t.to | date }}&#10;{% if t.shares_before or t.shares_after %}{{ t.shares_before | intfr }} → {{ t.shares_after | intfr }} titres&#10;{% endif %}{{ t.value_before | eur }} → {{ t.value_after | eur }}&#10;Établi sur : {{ labels.CHANGE_BASIS[t.basis] }}"><span class="chg chg-{{ t.kind }}">{{ labels.CHANGES[t.kind] }}</span>{{ t.company.name }} · {{ t.from | date_short }} → {{ t.to | date }}</span>
+{%- endmacro %}
+
+{% macro signal(s, show_person=True, compact=False) %}
+{% set ev = s.evidence %}
+<article class="sig {{ s.level }}{{ ' compact' if compact }}" id="s{{ s.id }}">
+    <div class="sig-top">
+        {% if show_person and s.pslug %}{{ who(s) }}{% else %}<span class="sig-kind">{{ s.kind_label }}</span>{% endif %}
+        <span class="right">{% if show_person %}<span class="sig-kind">{{ s.kind_short }}</span>{% endif %}{{ level(s.level) }}</span>
+    </div>
+    <h3>{% if s.bill_slug %}<a href="/texte/{{ s.bill_slug }}">{{ s.title }}</a>{% elif s.company_slug %}<a href="/societe/{{ s.company_slug }}">{{ s.title }}</a>{% else %}{{ s.title }}{% endif %}</h3>
+    <p>{{ s.summary }}</p>
+
+    {% if ev.votes or ev.links or ev.trades or ev.lines or ev.holders %}
+    <div class="sig-ev">
+        {% if ev.votes %}
+            <span>{{ votebar(ev.votes.pour, ev.votes.contre, ev.votes.abst) }} {{ ev.votes.n }} scrutin{{ 's' if ev.votes.n > 1 }}</span>
+            {% if ev.votes.dissent %}<span class="chip strong" data-tip="Votes différents de la position majoritaire de son groupe">{{ ev.votes.dissent }} à rebours du groupe</span>{% endif %}
+            {% if ev.votes.final %}<span class="chip">Vote final : {{ ev.votes.final }}</span>{% endif %}
+        {% endif %}
+        {% for r in ev.roles or [] %}<span class="chip strong">{{ r | capitalize }} du texte</span>{% endfor %}
+        {% for l in (ev.links or [])[:4] %}
+            {% if l.company %}<a class="chip" href="/societe/{{ l.company.slug }}" data-tip="{{ labels.RELATIONS[l.rel] }} · {{ labels.STRENGTHS[l.strength] }}{% if l.detail %}&#10;{{ l.detail }}{% endif %}">{{ l.name }}{% if l.value %} · {{ l.value | eur }}{% endif %}</a>
+            {% else %}<span class="chip" data-tip="{{ labels.RELATIONS[l.rel] }} · {{ labels.STRENGTHS[l.strength] }}">{{ l.name }}{% if l.value %} · {{ l.value | eur }}{% endif %}</span>{% endif %}
+        {% endfor %}
+        {% if ev.n_links and ev.n_links > 4 %}<span class="muted">+ {{ ev.n_links - 4 }}</span>{% endif %}
+        {% for l in (ev.lines or [])[:4] %}
+            {% if l.company %}<a class="chip" href="/societe/{{ l.company.slug }}">{{ l.name }} · {{ l.value | eur }}</a>{% else %}<span class="chip">{{ l.name }} · {{ l.value | eur }}</span>{% endif %}
+        {% endfor %}
+        {% for t in (ev.trades or [])[:3] %}{{ trade_chip(t) }}{% endfor %}
+        {% if ev.n_trades and ev.n_trades > 3 %}<span class="muted">+ {{ ev.n_trades - 3 }} lignes</span>{% endif %}
+        {% for h in (ev.holders or [])[:5] %}<a class="chip" href="/personne/{{ h.slug }}">{{ h.name }}{% if h.value %} · {{ h.value | eur }}{% endif %}</a>{% endfor %}
+    </div>
+    {% endif %}
+
+    {% set quotes = ev.lobby if (ev.lobby is iterable and ev.lobby is not mapping) else [] %}
+    {% if not compact and (quotes or ev.sample_votes or s.kind == 'deport') %}
+    <details>
+        <summary>Éléments à vérifier</summary>
+        <div>
+            {% if s.kind == 'deport' %}
+                <dl class="kv">
+                    <dt>Objet</dt><dd>{{ ev.target or '—' }}</dd>
+                    {% if ev.target_kind %}<dt>Portée</dt><dd>{{ ev.target_kind }}</dd>{% endif %}
+                    {% if ev.scope %}<dt>Engagement</dt><dd>{{ ev.scope }}</dd>{% endif %}
+                </dl>
+            {% endif %}
+            {% for q in quotes %}<blockquote>« {{ q.subject }} »<cite>{{ q.org }} — action de représentation d'intérêts déclarée pour {{ q.year }}</cite></blockquote>{% endfor %}
+            {% if ev.sample_votes %}
+                <table>
+                    <tbody>
+                    {% for v in ev.sample_votes %}
+                    <tr>
+                        <td class="nowrap muted">{{ v.date | date }}</td>
+                        <td><a href="{{ an_base }}/dyn/{{ v.legislature }}/scrutins/{{ v.numero }}" target="_blank" rel="noopener">{{ v.title | truncate(150) }} ↗</a></td>
+                        <td class="nowrap"><span class="key" style="--k:var(--{{ {1: 'pour', 2: 'contre', 3: 'abst'}[v.position] }});margin:0">{{ labels.POSITIONS[v.position] | capitalize }}</span>{% if v.dissent %} <span class="chip strong">≠ groupe</span>{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                    </tbody>
+                </table>
+            {% endif %}
+        </div>
+    </details>
+    {% endif %}
+
+    <div class="sig-foot">
+        {% if s.date %}<span>{{ s.date | date }}</span>{% endif %}
+        {% if ev.decl %}<span>{{ decl_link(ev.decl) }}</span>{% endif %}
+        {% if ev.prev_decl %}<span>{{ decl_link(ev.prev_decl, 'Déclaration précédente') }}</span>{% endif %}
+        {% if s.level != 'info' %}<span class="score" data-tip="Score de priorité, de 0 à 100.&#10;Voir la page Méthode pour le barème.">score {{ s.score }}</span>{% endif %}
+    </div>
+</article>
+{% endmacro %}
+
+{% macro pager(pg, url_with) %}
+{% if pg.pages > 1 %}
+<nav class="pager" aria-label="Pagination">
+    {% if pg.page > 1 %}<a href="{{ url_with(page=pg.page - 1) }}">← Précédent</a>{% endif %}
+    <span class="cur">Page {{ pg.page }} sur {{ pg.pages }} · {{ pg.total | intfr }} résultats</span>
+    {% if pg.page < pg.pages %}<a href="{{ url_with(page=pg.page + 1) }}">Suivant →</a>{% endif %}
+</nav>
+{% endif %}
+{% endmacro %}
+
+{% macro scope_tabs(scope, url_with, only=None) %}
+<div class="seg" role="tablist" aria-label="Périmètre">
+    {% for key, (label, _) in scopes.items() %}{% if not only or key in only %}
+    <a href="{{ url_with(scope=key, groupe=None) }}" class="{{ 'on' if key == scope }}" role="tab" aria-selected="{{ 'true' if key == scope else 'false' }}">{{ {'an': 'Assemblée', 'senat': 'Sénat', 'gouv': 'Gouvernement', 'tous': 'Tous'}[key] }}</a>
+    {% endif %}{% endfor %}
+</div>
+{% endmacro %}
+
+{% macro move_rows(rows, show_person=True, show_company=True) %}
+{% for m in rows %}
+<tr>
+    {% if show_person %}<td>{{ who(m) }}</td>{% endif %}
+    {% if show_company %}<td><a href="/societe/{{ m.company_slug }}">{{ m.company_name }}</a></td>{% endif %}
+    <td class="nowrap"><span class="chg chg-{{ m.kind }}" data-tip="Établi sur : {{ labels.CHANGE_BASIS[m.basis] }}{% if m.bulk >= 5 %}&#10;{{ m.bulk }} lignes modifiées dans la même déclaration{% endif %}{% if not m.same_mandate %}&#10;Déclarations faites au titre de deux mandats différents{% endif %}">{{ labels.CHANGES[m.kind] }}</span></td>
+    <td class="num">{% if m.shares_before or m.shares_after %}{{ m.shares_before | intfr }} → {{ m.shares_after | intfr }}{% else %}<span class="muted">—</span>{% endif %}</td>
+    <td class="num">{{ m.value_before | eur }} → {{ m.value_after | eur }}</td>
+    <td class="nowrap muted">{{ m.window_start | date_short }} → {{ m.window_end | date }}</td>
+</tr>
+{% endfor %}
+{% endmacro %}

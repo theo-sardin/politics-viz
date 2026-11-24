@@ -1,21 +1,15 @@
-FROM python:3.13-slim
+FROM python:3.12-slim
 
 WORKDIR /app
 
-# System deps for lxml
-RUN apt-get update \
- && apt-get install -y --no-install-recommends build-essential libxml2-dev libxslt1-dev \
- && rm -rf /var/lib/apt/lists/*
+COPY pyproject.toml README.md ./
+COPY pv ./pv
+RUN pip install --no-cache-dir .
 
-COPY pyproject.toml ./
-RUN pip install --no-cache-dir -e .
-
-COPY app.py sync.py db.py queries.py ./
-COPY parsers ./parsers
-COPY templates ./templates
-COPY static ./static
-
-ENV POLITICS_DB=/data/data.sqlite
+# Raw downloads, the database and the legacy archive all live under /data.
+ENV PV_DATA_DIR=/data
+VOLUME /data
 EXPOSE 8000
 
-CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
+# Build the database first:  docker run --rm -v $PWD/data:/data politics-viz pv sync
+CMD ["uvicorn", "pv.web.app:app", "--host", "0.0.0.0", "--port", "8000"]

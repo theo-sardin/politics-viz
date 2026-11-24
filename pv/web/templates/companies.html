@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Sociétés détenues — {{ scopes[scope][0] }}{% endblock %}
+{% block main %}
+<div class="page-head">
+    <div>
+        <h1>Sociétés détenues</h1>
+        <p class="lede">{{ pg.total | intfr }} sociétés figurent dans la dernière déclaration d'au moins une personne du périmètre.</p>
+    </div>
+    {{ m.scope_tabs(scope, url_with) }}
+</div>
+<form class="filters" method="get" action="/societes">
+    <input type="hidden" name="scope" value="{{ scope }}">
+    <select name="secteur" aria-label="Secteur">
+        <option value="">Tous les secteurs</option>
+        {% for s in sectors.values() %}<option value="{{ s.slug }}" {{ 'selected' if filters.secteur == s.slug }}>{{ s.label }}</option>{% endfor %}
+    </select>
+    <select name="tri" aria-label="Tri">
+        <option value="holders" {{ 'selected' if filters.tri == 'holders' }}>Par nombre de détenteurs</option>
+        <option value="value" {{ 'selected' if filters.tri == 'value' }}>Par valeur déclarée</option>
+    </select>
+    <div class="grow"><input type="search" name="q" value="{{ filters.q }}" placeholder="Filtrer par nom…" aria-label="Filtrer par nom de société"></div>
+    <button class="btn" type="submit">Filtrer</button>
+</form>
+<section class="card">
+    {% if rows %}
+    <div class="tbl-wrap">
+    <table>
+        <thead><tr><th>Société</th><th>Secteur</th><th class="num">Détenteurs</th><th class="num">Valeur déclarée</th><th>Lobbying</th><th class="num">Signaux</th></tr></thead>
+        <tbody>
+        {% for c in rows %}
+        <tr>
+            <td><a href="/societe/{{ c.slug }}">{{ c.name }}</a> <span class="muted small">{{ labels.COMPANY_KINDS[c.kind] | lower }}</span></td>
+            <td><span class="chips">{% for s in c.sector_list %}<span class="chip">{{ s.short }}</span>{% endfor %}</span></td>
+            <td class="num">{{ c.n }}</td>
+            <td class="num">{{ c.total | eur }}</td>
+            <td>{% if c.lobby %}<span class="chip" data-tip="Inscrite au répertoire des représentants d'intérêts de la HATVP">Déclaré</span>{% endif %}</td>
+            <td class="num">{{ c.n_signals or '—' }}</td>
+        </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}<p class="empty">Aucune société ne correspond à ces filtres.</p>{% endif %}
+</section>
+{{ m.pager(pg, url_with) }}
+{% endblock %}

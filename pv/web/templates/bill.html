@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ b.short }}{% endblock %}
+{% block main %}
+<p class="crumb"><a href="/textes">Textes</a> › {{ b.legislature }}e législature</p>
+<div class="page-head">
+    <div>
+        <h1 style="font-size:1.4rem;max-width:44ch">{{ b.title }}</h1>
+        <div class="chips" style="margin-top:10px">
+            {% for s in b.sectors %}<a class="chip strong" href="/textes?secteur={{ s.slug }}">{{ s.label }}</a>{% endfor %}
+            {% if b.transversal %}<span class="chip" data-tip="Texte budgétaire ou fourre-tout : il touche tous les secteurs, donc aucun lien sectoriel n'en est tiré.">Transversal</span>{% endif %}
+            {% if b.budget %}<span class="chip" data-tip="Budget de la sécurité sociale : lien sectoriel large (santé, assurance), pondéré à la baisse.">Budget social</span>{% endif %}
+            {% if b.procedure %}<span class="chip">{{ b.procedure }}</span>{% endif %}
+            {% if b.committee %}<span class="chip">{{ b.committee }}</span>{% endif %}
+            {% for c in b.companies %}<a class="chip strong" href="/societe/{{ c.slug }}" data-tip="Société nommée dans l'intitulé du texte">{{ c.name }}</a>{% endfor %}
+            {% if b.url %}<a class="chip" href="{{ b.url }}" target="_blank" rel="noopener">Dossier législatif ↗</a>{% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="tiles">
+    <div class="tile"><div class="l">Scrutins publics</div><div class="v">{{ b.n_scrutins }}</div><div class="s">du {{ b.first_vote | date }} au {{ b.last_vote | date }}</div></div>
+    <div class="tile"><div class="l">Élus concernés</div><div class="v">{{ b.signals | map(attribute='person_id') | unique | list | length if b.signals else 0 }}</div><div class="s">ont voté ou rapporté avec un intérêt lié</div></div>
+    <div class="tile"><div class="l">Lobbying déclaré</div><div class="v">{{ b.n_lobby_orgs }}</div><div class="s">organisations · {{ b.n_lobby }} actions mentionnant ce texte</div></div>
+    <div class="tile"><div class="l">Déports</div><div class="v">{{ b.deports | length }}</div><div class="s">élus s'étant retirés du débat ou du vote</div></div>
+</div>
+
+<div class="grid g-side">
+<div class="stack">
+    <section class="card">
+        <h2>Élus ayant un intérêt lié à ce texte <span class="small" style="text-transform:none;letter-spacing:0;font-weight:400">{{ m.vote_keys() }}</span></h2>
+        {% if b.signals %}
+        <div class="signals">{% for s in b.signals %}{{ m.signal(s) }}{% endfor %}</div>
+        {% if b.n_signals > b.signals | length %}<p class="note">{{ b.n_signals - b.signals | length }} autres signaux, de niveau plus faible, ne sont pas affichés ici.</p>{% endif %}
+        {% else %}
+        <p class="empty">Aucun rapprochement entre ce texte et un intérêt déclaré.{% if b.transversal %} Les textes transversaux n'en produisent que si leur intitulé nomme une société.{% endif %}</p>
+        {% endif %}
+    </section>
+
+    {% if b.lobby %}
+    <section class="card">
+        <h2>Qui a déclaré du lobbying sur ce texte</h2>
+        <div class="tbl-wrap">
+        <table>
+            <thead><tr><th>Organisation</th><th>Objet déclaré</th><th class="num">Année</th><th class="num" data-tip="Parlementaires et ministres déclarant une participation dans la société liée">Détenteurs</th></tr></thead>
+            <tbody>
+            {% for l in b.lobby %}
+            <tr>
+                <td>{% if l.company_slug %}<a href="/societe/{{ l.company_slug }}">{{ l.org | truncate(42) }}</a>{% else %}{{ l.org | truncate(42) }}{% endif %}</td>
+                <td class="small ink2">{{ l.subject | truncate(190) }}</td>
+                <td class="num">{{ l.year }}</td>
+                <td class="num">{{ l.holders or '—' }}</td>
+            </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        <p class="note">Actions de représentation d'intérêts dont l'objet déclaré à la HATVP mentionne ce texte{% if b.n_lobby > b.lobby | length %} ({{ b.lobby | length }} affichées sur {{ b.n_lobby }}){% endif %}. Le rapprochement est fait sur l'intitulé : lisez l'objet avant de conclure.</p>
+    </section>
+    {% endif %}
+</div>
+
+<div class="stack">
+    {% if b.roles %}
+    <section class="card">
+        <h2>Auteurs et rapporteurs</h2>
+        <div class="list">
+            {% for r in b.roles %}<div>{{ m.who(r) }}<span class="small muted">{{ r.bill_role | capitalize }}</span></div>{% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    {% if b.deports %}
+    <section class="card">
+        <h2>Déports sur ce texte</h2>
+        <div class="list">
+            {% for d in b.deports %}<div>{{ m.who(d) }}<span class="small ink2">« {{ d.reason or 'Motif non précisé' }} »</span><span class="small muted">{{ d.date | date }}{% if d.scope %} · {{ d.scope }}{% endif %}</span></div>{% endfor %}
+        </div>
+    </section>
+    {% endif %}
+
+    <section class="card">
+        <h2>Scrutins</h2>
+        <div class="list">
+            {% for s in b.scrutins %}
+            <div>
+                <a href="{{ an_base }}/dyn/{{ s.legislature }}/scrutins/{{ s.numero }}" target="_blank" rel="noopener">{{ s.title | truncate(120) }} ↗</a>
+                <span class="small muted">{{ m.votebar(s.n_pour, s.n_contre, s.n_abstention) }} {{ s.date | date }} · {{ s.outcome or '—' }}</span>
+            </div>
+            {% endfor %}
+        </div>
+        {% if b.n_scrutins > b.scrutins | length %}<p class="note">Les votes sur l'ensemble d'abord, puis les {{ b.scrutins | length }} scrutins les plus récents sur {{ b.n_scrutins }}.</p>{% endif %}
+    </section>
+</div>
+</div>
+{% endblock %}

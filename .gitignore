@@ -2,13 +2,12 @@
 __pycache__/
 *.pyc
 .pytest_cache/
-data.sqlite
-data.sqlite-journal
-data.sqlite-wal
-data.sqlite-shm
-data.xml
-.DS_Store
+.ruff_cache/
 *.egg-info/
 build/
 dist/
+.DS_Store
 .idea/
+
+# Downloaded sources, the built database and the legacy archive.
+data/

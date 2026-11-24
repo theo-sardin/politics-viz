@@ -1,0 +1,15 @@
+{% if data.bills %}
+<table>
+    <thead><tr><th>Texte</th><th class="num">Élus concernés</th><th>Niveau max.</th></tr></thead>
+    <tbody>
+    {% for b in data.bills %}
+    <tr>
+        <td><a href="/texte/{{ b.slug }}">{{ b.short }}</a><span class="muted small"> · {{ b.n_scrutins }} scrutins</span></td>
+        <td class="num">{{ b.n_people }}</td>
+        <td>{{ m.level(b.level) }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+</table>
+<p class="note">Nombre d'élus du périmètre ayant voté sur le texte tout en déclarant un intérêt qui s'y rattache. Hors textes budgétaires.</p>
+{% else %}<p class="empty">Aucun texte exposé dans ce périmètre.</p>{% endif %}

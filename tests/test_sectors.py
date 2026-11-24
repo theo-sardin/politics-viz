@@ -1,71 +1,61 @@
-from parsers.sectors import tag_vote, tag_company, _classify_direction, cmd_sectors
-import db
+import pytest
+
+from pv.sectors import classify_bill, committee_sectors, sectors_for_domains
 
 
-def test_tag_vote_energy():
-    tags = tag_vote("projet de loi relatif à l'accélération des énergies renouvelables")
-    sectors = [s for s, _ in tags]
-    assert "energy" in sectors
+@pytest.mark.parametrize(
+    "title, expected",
+    [
+        ("Projet de loi relatif à l'accélération de la production d'énergies renouvelables", {"energie"}),
+        ("Projet de loi actualisant la programmation militaire pour les années 2024 à 2030", {"defense"}),
+        ("Proposition de loi visant à lutter contre les fermetures abusives de comptes bancaires", {"banque"}),
+        ("Proposition de loi visant à lutter contre les pénuries de médicaments", {"sante"}),
+        ("Proposition de loi visant à la nationalisation d'ArcelorMittal France", {"industrie"}),
+        ("Proposition de loi visant à abroger les zones à faibles émissions-mobilités", {"automobile"}),
+    ],
+)
+def test_bill_sectors(title, expected):
+    assert set(classify_bill(title).sectors) == expected
 
 
-def test_tag_vote_direction_pro():
-    tags = tag_vote("accélération des énergies renouvelables")
-    for sector, direction in tags:
-        if sector == "energy":
-            assert direction == "pro"
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Proposition de loi relative au droit à l'aide à mourir",
+        "Proposition de loi visant à reconnaître une présomption de légitime défense pour les forces de l'ordre",
+        "Projet de loi relatif à l'organisation des jeux Olympiques et Paralympiques de 2030",
+        "Proposition de loi visant à reconnaître les victimes de l'exposition aux essais nucléaires français",
+        "Proposition de résolution tendant à la création d'une commission d'enquête sur les médias",
+        "Projet de loi autorisant la ratification de la convention sur le transport maritime",
+        "Projet de loi portant transposition de l'accord relatif à l'assurance chômage",
+    ],
+)
+def test_a_keyword_alone_does_not_make_a_bill_sectoral(title):
+    assert classify_bill(title).sectors == ()
 
 
-def test_tag_vote_direction_anti():
-    tags = tag_vote("régulation du marché de l'énergie")
-    for sector, direction in tags:
-        if sector == "energy":
-            assert direction == "anti"
+@pytest.mark.parametrize(
+    "title",
+    [
+        "Projet de loi de finances pour 2026",
+        "Projet de loi de finances de fin de gestion pour 2025",
+        "Projet de loi de simplification de la vie économique",
+        "Projet de loi de financement rectificative de la sécurité sociale pour 2023",
+    ],
+)
+def test_catch_all_bills_are_transversal(title):
+    cls = classify_bill(title)
+    assert cls.transversal and cls.sectors == ()
 
 
-def test_tag_vote_neutral():
-    tags = tag_vote("projet de loi relatif à l'énergie")
-    for sector, direction in tags:
-        if sector == "energy":
-            assert direction == "neutral"
+def test_social_security_budget_is_a_broad_health_bill():
+    cls = classify_bill("Projet de loi de financement de la sécurité sociale pour 2026")
+    assert cls.budget and not cls.transversal
+    assert set(cls.sectors) == {"sante", "assurance"}
 
 
-def test_tag_vote_banking():
-    tags = tag_vote("encadrement des frais bancaires")
-    sectors = [s for s, _ in tags]
-    assert "banking" in sectors
-
-
-def test_tag_vote_no_match():
-    tags = tag_vote("motion de censure déposée par le groupe LFI")
-    assert tags == []
-
-
-def test_tag_company_manual_override():
-    assert "energy" in tag_company("total-energies", "TotalEnergies SE")
-    assert "luxury" in tag_company("l-oreal", "L'Oréal")
-    assert "banking" in tag_company("credit-agricole", "Crédit Agricole")
-
-
-def test_tag_company_keyword():
-    assert "energy" in tag_company("francaise-energie", "Francaise Energie SA")
-    assert "pharma" in tag_company("sanofi", "Sanofi")
-
-
-def test_tag_company_no_match():
-    assert tag_company("random-thing", "Blabla Corp") == []
-
-
-def test_classify_direction():
-    assert _classify_direction("acceleration des choses") == "pro"
-    assert _classify_direction("regulation stricte") == "anti"
-    assert _classify_direction("discussion generale") == "neutral"
-    # both pro + anti → neutral
-    assert _classify_direction("acceleration et regulation") == "neutral"
-
-
-def test_cmd_sectors_on_empty_db():
-    conn = db.connect(":memory:")
-    db.init_schema(conn)
-    stats = cmd_sectors(conn)
-    assert stats["votes_tagged"] == 0
-    assert stats["companies_tagged"] == 0
+def test_committee_and_lobbying_vocabularies():
+    assert committee_sectors("Commission de la défense nationale et des forces armées") == ("defense",)
+    assert "sante" in committee_sectors("Commission des affaires sociales")
+    assert committee_sectors("Commission des lois") == ()
+    assert sectors_for_domains(["Médicaments", "Politique industrielle", "Société"]) == ("sante", "industrie")

@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Réseau des participations — {{ scopes[scope][0] }}{% endblock %}
+{% block main %}
+<div class="page-head">
+    <div>
+        <h1>Qui détient les mêmes sociétés</h1>
+        <p class="lede">Chaque rond est un élu, chaque carré une société détenue par plusieurs d'entre eux. Deux élus reliés au même carré déclarent tous deux une participation dans cette société. Survolez un nœud pour isoler ses liens, cliquez pour ouvrir sa fiche.</p>
+    </div>
+    {{ m.scope_tabs(scope, url_with) }}
+</div>
+<form class="filters" method="get" action="/reseau">
+    <input type="hidden" name="scope" value="{{ scope }}">
+    <select name="secteur" aria-label="Secteur">
+        <option value="">Tous les secteurs</option>
+        {% for s in sectors.values() %}<option value="{{ s.slug }}" {{ 'selected' if filters.secteur == s.slug }}>{{ s.label }}</option>{% endfor %}
+    </select>
+    <select name="min" aria-label="Nombre minimal de détenteurs">
+        {% for n in (2, 3, 5, 8, 12) %}<option value="{{ n }}" {{ 'selected' if filters.min == n }}>Sociétés détenues par au moins {{ n }} élus</option>{% endfor %}
+    </select>
+    <span class="muted small" id="net-count"></span>
+</form>
+<section class="card" style="padding:0;overflow:hidden">
+    <svg id="net" role="img" aria-label="Graphe des participations communes"></svg>
+</section>
+<div class="grouplist" id="net-legend" style="margin-top:12px"></div>
+<p class="note muted small" style="margin-top:8px">Hors fonds et banques mutualistes, dont presque tout le monde détient des parts. La même information existe en tableau dans <a href="/societes?scope={{ scope }}">Sociétés</a>.</p>
+{% endblock %}
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js" defer></script>
+<script src="{{ url_for('static', path='network.js') }}?v={{ asset_version }}" defer
+        data-url="/api/reseau?scope={{ scope }}&min={{ filters.min }}{% if filters.secteur %}&secteur={{ filters.secteur }}{% endif %}"></script>
+{% endblock %}
