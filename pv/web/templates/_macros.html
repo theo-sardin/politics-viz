@@ -18,7 +18,7 @@
 {%- endmacro %}
 
 {% macro who(r, role=True) -%}
-<a class="who" href="/personne/{{ r.pslug }}/">{{ avatar(r) }}<span style="min-width:0"><span class="n">{{ r.prenom }} {{ r.nom }}</span>{% if role %}<span class="r">{% if r.group_code %}{{ r.group_code }} · {% endif %}{{ r.role or labels.CHAMBERS.get(r.chamber, '') }}</span>{% endif %}</span></a>
+<a class="who" href="/personne/{{ r.pslug }}/">{{ avatar(r) }}<span style="min-width:0"><span class="n">{{ r.prenom }} {{ r.nom }}</span>{% if role %}{% set line = (r.group_code ~ ' · ' if r.group_code else '') ~ (r.role or labels.CHAMBERS.get(r.chamber, '')) %}<span class="r" title="{{ line }}">{{ line }}</span>{% endif %}</span></a>
 {%- endmacro %}
 
 {% macro level(l) -%}
