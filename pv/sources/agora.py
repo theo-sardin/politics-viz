@@ -8,9 +8,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterator
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Iterator
 
 _PARL = "député, sénateur"
 _LAW = "lois"
@@ -93,14 +93,18 @@ def read_orgs(path: str | Path) -> Iterator[LobbyOrg]:
         name = (p.get("denomination") or "").strip()
         if not national_id or not name:
             continue
-        aliases = [a.strip() for a in (p.get("nomUsageHatvp"), p.get("nomUsage"), p.get("sigleHatvp")) if a and a.strip()]
+        aliases = [
+            a.strip() for a in (p.get("nomUsageHatvp"), p.get("nomUsage"), p.get("sigleHatvp")) if a and a.strip()
+        ]
         org = LobbyOrg(
             national_id=national_id,
             name=name,
             aliases=aliases,
             category=((p.get("categorieOrganisation") or {}).get("label") or "").strip() or None,
             website=(p.get("lienSiteWeb") or "").strip() or None,
-            sector_labels=[s.get("label") for s in (p.get("activites") or {}).get("listSecteursActivites") or [] if s.get("label")],
+            sector_labels=[
+                s.get("label") for s in (p.get("activites") or {}).get("listSecteursActivites") or [] if s.get("label")
+            ],
             active=not p.get("dateCessation"),
         )
         for ex in p.get("exercices") or []:

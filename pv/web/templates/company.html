@@ -3,13 +3,13 @@
 {% block title %}{{ c.name }}{% endblock %}
 {% block main %}
 {% set spend = c.lobby_years | selectattr('spend_max') | list %}
-<p class="crumb"><a href="/societes">Sociétés</a></p>
+<p class="crumb"><a href="{{ page_url('societes', 'tous') }}">Sociétés</a></p>
 <div class="page-head">
     <div>
         <h1>{{ c.name }}</h1>
         <div class="chips" style="margin-top:8px">
             <span class="chip strong">{{ labels.COMPANY_KINDS[c.kind] }}{% if c.ticker %} · {{ c.ticker }}{% endif %}</span>
-            {% for s in c.sectors %}<a class="chip" href="/societes?secteur={{ s.slug }}&scope=tous">{{ s.label }}</a>{% endfor %}
+            {% for s in c.sectors %}<a class="chip" href="{{ page_url('societes', 'tous') }}?secteur={{ s.slug }}">{{ s.label }}</a>{% endfor %}
             {% if c.lobby_orgs %}<span class="chip" data-tip="{{ c.lobby_orgs | length }} entité{{ 's' if c.lobby_orgs | length > 1 }} inscrite{{ 's' if c.lobby_orgs | length > 1 }} au répertoire des représentants d'intérêts">Lobbying déclaré</span>{% endif %}
         </div>
     </div>
@@ -68,7 +68,7 @@
     <section class="card">
         <h2>Signaux impliquant {{ c.name }} <span class="small" style="text-transform:none;letter-spacing:0;font-weight:400">{{ m.vote_keys() }}</span></h2>
         <div class="signals">{% for s in c.signals %}{{ m.signal(s) }}{% endfor %}</div>
-        {% if c.n_signals > c.signals | length %}<p class="note">{{ c.n_signals - c.signals | length }} autres signaux dans la <a href="/signaux?scope=tous&q={{ c.name | urlencode }}">liste complète</a>.</p>{% endif %}
+        {% if c.n_signals > c.signals | length %}<p class="note">{{ c.n_signals - c.signals | length }} autres signaux dans la <a href="{{ page_url('signaux', 'tous') }}?q={{ c.name | urlencode }}">liste complète</a>.</p>{% endif %}
     </section>
     {% endif %}
 
@@ -114,7 +114,7 @@
         <div class="bars" role="list">
             {% for g in c.by_group %}
             <div class="bar-row" role="listitem" data-tip="{{ g.label }}&#10;{{ g.n }} détenteur{{ 's' if g.n > 1 }} · {{ g.value | eur }}">
-                <span class="lab">{% if g.slug %}<a class="grp" href="/groupe/{{ g.slug }}" style="--g:{{ g.color }};--gd:{{ g.color_dark }}"><span class="dot"></span>{{ g.label }}</a>{% else %}<span class="grp"><span class="dot"></span>{{ g.label }}</span>{% endif %}</span>
+                <span class="lab">{% if g.slug %}<a class="grp" href="/groupe/{{ g.slug }}/" style="--g:{{ g.color }};--gd:{{ g.color_dark }}"><span class="dot"></span>{{ g.label }}</a>{% else %}<span class="grp"><span class="dot"></span>{{ g.label }}</span>{% endif %}</span>
                 <div class="track"><div class="fill g" style="width:{{ (100 * g.n / peak) | round(1) }}%;{% if g.color %}--g:{{ g.color }};--gd:{{ g.color_dark }}{% endif %}"></div></div>
                 <span class="val">{{ g.n }}</span>
             </div>
@@ -127,7 +127,7 @@
     <section class="card">
         <h2>Textes qui nomment cette société</h2>
         <div class="list">
-            {% for b in c.named_bills %}<div><a href="/texte/{{ b.slug }}">{{ b.title }}</a><span class="small muted">{{ b.n_scrutins }} scrutins · dernier vote le {{ b.last_vote | date }}</span></div>{% endfor %}
+            {% for b in c.named_bills %}<div><a href="/texte/{{ b.slug }}/">{{ b.title }}</a><span class="small muted">{{ b.n_scrutins }} scrutins · dernier vote le {{ b.last_vote | date }}</span></div>{% endfor %}
         </div>
     </section>
     {% endif %}
@@ -153,7 +153,7 @@
         <div class="list">
             {% for b in c.lobby_bills %}
             <div>
-                <a href="/texte/{{ b.slug }}">{{ b.short }}</a>
+                <a href="/texte/{{ b.slug }}/">{{ b.short }}</a>
                 {% if b.sample %}<span class="small muted">« {{ b.sample | truncate(140) }} »</span>{% endif %}
             </div>
             {% endfor %}

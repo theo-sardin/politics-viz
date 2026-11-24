@@ -20,10 +20,16 @@ SCOPES: dict[str, tuple[str, str]] = {
 }
 DEFAULT_SCOPE = "an"
 
-VOTE_KINDS = ("mouvement_vote", "rapporteur", "vote_participation", "vote_activite", "vote_famille",
-              "vote_collaborateur")
+VOTE_KINDS = (
+    "mouvement_vote",
+    "rapporteur",
+    "vote_participation",
+    "vote_activite",
+    "vote_famille",
+    "vote_collaborateur",
+)
 
-_PERSON_COLS = """p.id, p.slug AS pslug, p.prenom, p.nom, p.civilite, p.chamber, p.active, p.role, p.photo_url, p.committee,
+_PERSON_COLS = """p.id, p.slug AS pslug, p.search_key AS pkey, p.prenom, p.nom, p.civilite, p.chamber, p.active, p.role, p.photo_url, p.committee,
                   p.portfolio_eur, p.n_holdings, p.n_signals, p.top_score,
                   g.slug AS group_slug, g.code AS group_code, g.label AS group_label,
                   g.color AS group_color, g.color_dark AS group_color_dark"""
@@ -63,7 +69,7 @@ def freshness(conn: sqlite3.Connection) -> dict:
     meta = {r["key"]: r["value"] for r in conn.execute("SELECT key, value FROM meta")}
     return {
         "synced_at": meta.get("synced_at"),
-        "last_declaration": conn.execute("SELECT MAX(filed_at) FROM declaration WHERE status='published'").fetchone()[0],
+        "last_declaration": conn.execute("SELECT MAX(filed_at) FROM declaration").fetchone()[0],
         "last_vote": conn.execute("SELECT MAX(date) FROM scrutin").fetchone()[0],
         "sources": [
             {"name": name, "label": src.label, "url": src.url, "date": meta.get(f"source:{name}")}
@@ -80,7 +86,7 @@ _SIGNAL_SQL = f"""
     SELECT s.id, s.kind, s.score, s.level, s.date, s.title, s.summary, s.evidence,
            s.person_id, s.company_id, s.bill_id,
            {_PERSON_COLS},
-           c.slug AS company_slug, c.name AS company_name,
+           c.slug AS company_slug, c.name AS company_name, c.search_key AS company_key,
            b.title AS bill_title, b.legislature AS bill_legislature, b.slug AS bill_slug
     FROM signal s
     LEFT JOIN person p ON p.id = s.person_id
@@ -97,6 +103,10 @@ def _hydrate(rows: list[dict]) -> list[dict]:
         r["kind_short"] = labels.SIGNAL_SHORT.get(r["kind"], r["kind"])
         if r.get("bill_title"):
             r["bill_short"] = labels.short_bill(r["bill_title"])
+        # What the list page filters on, in the browser.
+        r["text"] = " ".join(x for x in (r.get("pkey"), fold(r["title"]), r.get("company_key")) if x)
+        family = " votes" if r["kind"] in VOTE_KINDS else " liens" if r["kind"].startswith("lien_") else ""
+        r["type_tokens"] = r["kind"] + family
     return rows
 
 
@@ -104,36 +114,17 @@ def signals(
     conn: sqlite3.Connection,
     *,
     scope: str = "tous",
-    level: str | None = None,
-    kind: str | None = None,
     group: str | None = None,
-    q: str | None = None,
     person_id: int | None = None,
     company_id: int | None = None,
     bill_id: int | None = None,
-    sort: str = "score",
-    limit: int = 50,
-    offset: int = 0,
+    limit: int | None = None,
 ) -> tuple[list[dict], int]:
+    """Signals, strongest first, with the total before *limit*."""
     where, params = [scope_sql(scope)], []
-    if level:
-        where.append("s.level = ?")
-        params.append(level)
-    if kind == "votes":
-        where.append(f"s.kind IN ({','.join('?' * len(VOTE_KINDS))})")
-        params += VOTE_KINDS
-    elif kind == "liens":
-        where.append("s.kind LIKE 'lien_%'")
-    elif kind:
-        where.append("s.kind = ?")
-        params.append(kind)
     if group:
         where.append("g.slug = ?")
         params.append(group)
-    if q:
-        where.append("(p.search_key LIKE ? OR s.title LIKE ? OR c.search_key LIKE ?)")
-        f = f"%{fold(q)}%"
-        params += [f, f"%{q}%", f]
     if person_id is not None:
         where.append("s.id IN (SELECT signal_id FROM signal_person WHERE person_id = ?)")
         params.append(person_id)
@@ -144,23 +135,39 @@ def signals(
         where.append("s.bill_id = ?")
         params.append(bill_id)
     clause = " AND ".join(where)
-    order = "s.date DESC, s.score DESC" if sort == "date" else "s.score DESC, s.date DESC"
     total = conn.execute(
         f"""SELECT COUNT(*) FROM signal s LEFT JOIN person p ON p.id = s.person_id
-            LEFT JOIN groupe g ON g.id = p.group_id LEFT JOIN company c ON c.id = s.company_id
-            WHERE {clause}""",
+            LEFT JOIN groupe g ON g.id = p.group_id WHERE {clause}""",
         params,
     ).fetchone()[0]
-    rows = _rows(conn, f"{_SIGNAL_SQL} WHERE {clause} ORDER BY {order} LIMIT ? OFFSET ?", [*params, limit, offset])
-    return _hydrate(rows), total
+    sql = f"{_SIGNAL_SQL} WHERE {clause} ORDER BY s.score DESC, s.date DESC, s.id"
+    if limit is not None:
+        sql += " LIMIT ?"
+        params = [*params, limit]
+    return _hydrate(_rows(conn, sql, params)), total
+
+
+def groups(conn: sqlite3.Connection, scope: str) -> list[dict]:
+    """Political groups of a chamber, left to right; none outside the two chambers."""
+    return _rows(
+        conn, "SELECT slug, code, label, color, color_dark FROM groupe WHERE chamber = ? ORDER BY ord", (scope,)
+    )
 
 
 def signal_facets(conn: sqlite3.Connection, scope: str) -> dict:
     clause = scope_sql(scope)
-    by_level = {r["level"]: r["n"] for r in conn.execute(
-        f"SELECT s.level, COUNT(*) n FROM signal s JOIN person p ON p.id = s.person_id WHERE {clause} GROUP BY 1")}
-    by_kind = {r["kind"]: r["n"] for r in conn.execute(
-        f"SELECT s.kind, COUNT(*) n FROM signal s JOIN person p ON p.id = s.person_id WHERE {clause} GROUP BY 1")}
+    by_level = {
+        r["level"]: r["n"]
+        for r in conn.execute(
+            f"SELECT s.level, COUNT(*) n FROM signal s JOIN person p ON p.id = s.person_id WHERE {clause} GROUP BY 1"
+        )
+    }
+    by_kind = {
+        r["kind"]: r["n"]
+        for r in conn.execute(
+            f"SELECT s.kind, COUNT(*) n FROM signal s JOIN person p ON p.id = s.person_id WHERE {clause} GROUP BY 1"
+        )
+    }
     return {"level": by_level, "kind": by_kind}
 
 
@@ -208,7 +215,9 @@ def home(conn: sqlite3.Connection, scope: str) -> dict:
         "companies": top_companies(conn, scope, 12),
         "heatmap": sector_heatmap(conn, scope),
         "bills": exposed_bills(conn, scope, 8),
-        "deports": _hydrate(_rows(conn, f"{_SIGNAL_SQL} WHERE s.kind = 'deport' AND {clause} ORDER BY s.date DESC LIMIT 5")),
+        "deports": _hydrate(
+            _rows(conn, f"{_SIGNAL_SQL} WHERE s.kind = 'deport' AND {clause} ORDER BY s.date DESC LIMIT 5")
+        ),
         "hemicycle": hemicycle(conn, scope),
     }
 
@@ -233,7 +242,7 @@ def exposed_bills(conn: sqlite3.Connection, scope: str, n: int = 8) -> list[dict
         f"""SELECT b.id, b.slug, b.title, b.legislature, b.n_scrutins, b.last_vote,
                    COUNT(DISTINCT s.person_id) AS n_people, MAX(s.score) AS top_score
             FROM signal s JOIN bill b ON b.id = s.bill_id JOIN person p ON p.id = s.person_id
-            WHERE s.kind IN ({','.join('?' * len(VOTE_KINDS))}) AND b.budget = 0 AND {scope_sql(scope)}
+            WHERE s.kind IN ({",".join("?" * len(VOTE_KINDS))}) AND b.budget = 0 AND {scope_sql(scope)}
             GROUP BY b.id ORDER BY n_people DESC, top_score DESC LIMIT ?""",
         (*VOTE_KINDS, n),
     )
@@ -309,7 +318,7 @@ def _hemicycle_positions(n: int) -> tuple[list[tuple[float, float]], float]:
         while sum(counts) > n:
             j = max(range(rows), key=lambda k: counts[k])
             counts[j] -= 1
-        arc = min(math.pi * r / c for r, c in zip(radii, counts))
+        arc = min(math.pi * r / c for r, c in zip(radii, counts, strict=True))
         # A single row has the whole depth of the band to itself.
         gap = (1 - r0) / (rows - 1) if rows > 1 else 1 - r0
         score = abs(arc - gap)
@@ -317,7 +326,7 @@ def _hemicycle_positions(n: int) -> tuple[list[tuple[float, float]], float]:
             best = (score, radii, counts, min(arc, gap))
     _, radii, counts, spacing = best
     seats = []
-    for r, c in zip(radii, counts):
+    for r, c in zip(radii, counts, strict=True):
         for j in range(c):
             theta = math.pi * (1 - (j + 0.5) / c)
             seats.append((theta, r))
@@ -339,7 +348,7 @@ def hemicycle(conn: sqlite3.Connection, scope: str) -> dict | None:
     pos, radius = _hemicycle_positions(len(people))
     size = 500
     peak = max((p["portfolio_eur"] for p in people), default=0) or 1
-    for p, (x, y) in zip(people, pos):
+    for p, (x, y) in zip(people, pos, strict=True):
         p["x"] = round(size + x * size, 1)
         p["y"] = round(size - y * size + 8, 1)
         p["level"] = level_of(p["top_score"])
@@ -354,8 +363,14 @@ def hemicycle(conn: sqlite3.Connection, scope: str) -> dict | None:
             FROM groupe g JOIN person p ON p.group_id = g.id
             WHERE {scope_sql(scope)} GROUP BY g.id ORDER BY g.ord""",
     )
-    return {"seats": people, "groups": groups, "r": round(radius * size, 1), "w": size * 2, "h": size + 16,
-            "peak": peak}
+    return {
+        "seats": people,
+        "groups": groups,
+        "r": round(radius * size, 1),
+        "w": size * 2,
+        "h": size + 16,
+        "peak": peak,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -367,21 +382,13 @@ def moves(
     conn: sqlite3.Connection,
     *,
     scope: str = "tous",
-    kind: str | None = None,
-    q: str | None = None,
     person_id: int | None = None,
     company_id: int | None = None,
     notable: bool = False,
-    limit: int = 50,
-    offset: int = 0,
+    limit: int | None = None,
 ) -> tuple[list[dict], int]:
+    """Inferred buys and sells, latest first, with the total before *limit*."""
     where, params = [scope_sql(scope)], []
-    if kind:
-        where.append("pc.kind = ?")
-        params.append(kind)
-    if q:
-        where.append("(p.search_key LIKE ? OR c.search_key LIKE ?)")
-        params += [f"%{fold(q)}%"] * 2
     if person_id is not None:
         where.append("pc.person_id = ?")
         params.append(person_id)
@@ -400,15 +407,14 @@ def moves(
                JOIN company c ON c.id = pc.company_id
                WHERE {clause}"""
     total = conn.execute(f"SELECT COUNT(*) {base}", params).fetchone()[0]
-    rows = _rows(
-        conn,
-        f"""SELECT pc.*, {_PERSON_COLS}, c.slug AS company_slug, c.name AS company_name, c.kind AS company_kind,
-                   (SELECT COUNT(*) FROM position_change x WHERE x.curr_decl_id = pc.curr_decl_id) AS bulk
-            {base} ORDER BY pc.window_end DESC, COALESCE(pc.value_after, pc.value_before, 0) DESC
-            LIMIT ? OFFSET ?""",
-        [*params, limit, offset],
-    )
-    return rows, total
+    sql = f"""SELECT pc.*, {_PERSON_COLS}, c.slug AS company_slug, c.name AS company_name, c.kind AS company_kind,
+                     c.search_key AS company_key,
+                     (SELECT COUNT(*) FROM position_change x WHERE x.curr_decl_id = pc.curr_decl_id) AS bulk
+              {base} ORDER BY pc.window_end DESC, COALESCE(pc.value_after, pc.value_before, 0) DESC, pc.id"""
+    if limit is not None:
+        sql += " LIMIT ?"
+        params = [*params, limit]
+    return _rows(conn, sql, params), total
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +439,7 @@ def person(conn: sqlite3.Connection, slug: str) -> dict | None:
     decls = _rows(
         conn,
         """SELECT id, doc_type, is_modification, filed_at, published_at, mandate_kind, mandate_label,
-                  source_file, status, no_holdings, note
+                  source_file, no_holdings, note
            FROM declaration WHERE person_id = ? ORDER BY filed_at, id""",
         (pid,),
     )
@@ -443,8 +449,10 @@ def person(conn: sqlite3.Connection, slug: str) -> dict | None:
     p["current"] = current
 
     # Holdings line by line across declarations.
-    changes = {(c["curr_decl_id"], c["company_id"]): c for c in _rows(
-        conn, "SELECT * FROM position_change WHERE person_id = ?", (pid,))}
+    changes = {
+        (c["curr_decl_id"], c["company_id"]): c
+        for c in _rows(conn, "SELECT * FROM position_change WHERE person_id = ?", (pid,))
+    }
     lines: dict[object, dict] = {}
     totals: dict[int, int] = defaultdict(int)
     for d in series:
@@ -458,33 +466,53 @@ def person(conn: sqlite3.Connection, slug: str) -> dict | None:
             (d["id"],),
         ):
             key = h["company_id"] if h["company_id"] is not None else f"label:{h['label']}"
-            line = lines.setdefault(key, {"name": h["name"] or h["label"], "slug": h["slug"], "kind": h["kind"] or "unnamed",
-                                          "ticker": h["ticker"], "cells": {}, "peak": 0})
+            line = lines.setdefault(
+                key,
+                {
+                    "name": h["name"] or h["label"],
+                    "slug": h["slug"],
+                    "kind": h["kind"] or "unnamed",
+                    "ticker": h["ticker"],
+                    "cells": {},
+                    "peak": 0,
+                },
+            )
             ch = changes.get((d["id"], h["company_id"])) if h["company_id"] is not None else None
-            line["cells"][d["id"]] = {"value": h["value"], "shares": h["shares"], "pct": h["pct"], "n": h["n"],
-                                      "change": ch["kind"] if ch else None, "basis": ch["basis"] if ch else None}
+            line["cells"][d["id"]] = {
+                "value": h["value"],
+                "shares": h["shares"],
+                "pct": h["pct"],
+                "n": h["n"],
+                "change": ch["kind"] if ch else None,
+                "basis": ch["basis"] if ch else None,
+            }
             line["peak"] = max(line["peak"], h["value"] or 0)
             totals[d["id"]] += h["value"] or 0
     for (did, cid), ch in changes.items():
         if ch["kind"] == "sortie" and cid in lines:
-            lines[cid]["cells"].setdefault(did, {"value": None, "shares": None, "pct": None, "n": 0,
-                                                 "change": "sortie", "basis": ch["basis"]})
+            lines[cid]["cells"].setdefault(
+                did, {"value": None, "shares": None, "pct": None, "n": 0, "change": "sortie", "basis": ch["basis"]}
+            )
     p["series"] = series
-    p["lines"] = sorted(lines.values(), key=lambda l: -l["peak"])
+    p["lines"] = sorted(lines.values(), key=lambda ln: -ln["peak"])
     p["totals"] = dict(totals)
-    p["matrix_peak"] = max((l["peak"] for l in lines.values()), default=0)
+    p["matrix_peak"] = max((ln["peak"] for ln in lines.values()), default=0)
 
-    p["holdings"] = _rows(
-        conn,
-        """SELECT h.label, h.raw_name, h.value_eur, h.shares, h.capital_pct, h.income, h.comment, h.sectors,
+    p["holdings"] = (
+        _rows(
+            conn,
+            """SELECT h.label, h.raw_name, h.value_eur, h.shares, h.capital_pct, h.income, h.comment, h.sectors,
                   c.slug, c.name, c.kind, c.ticker,
                   (SELECT GROUP_CONCAT(cs.sector) FROM company_sector cs WHERE cs.company_id = c.id) AS co_sectors,
                   (SELECT COUNT(*) FROM lobby_org o WHERE o.company_id = c.id) AS lobby
            FROM holding h LEFT JOIN company c ON c.id = h.company_id
            WHERE h.declaration_id = ? AND h.kind = 'participation'
            ORDER BY COALESCE(h.value_eur, 0) DESC""",
-        (current["id"],),
-    ) if current else []
+            (current["id"],),
+        )
+        if current
+        else []
+    )
 
     interests: dict[str, list[dict]] = defaultdict(list)
     if current:
@@ -510,7 +538,11 @@ def person(conn: sqlite3.Connection, slug: str) -> dict | None:
     p["wealth"] = None
     if dsp:
         d = dsp[-1]
-        assets = _rows(conn, "SELECT kind, label, value_eur, detail FROM asset WHERE declaration_id = ? ORDER BY kind, value_eur DESC", (d["id"],))
+        assets = _rows(
+            conn,
+            "SELECT kind, label, value_eur, detail FROM asset WHERE declaration_id = ? ORDER BY kind, value_eur DESC",
+            (d["id"],),
+        )
         other = _rows(
             conn,
             """SELECT h.kind, h.label, h.value_eur, h.capital_pct, h.comment, c.slug
@@ -525,10 +557,11 @@ def person(conn: sqlite3.Connection, slug: str) -> dict | None:
             g["total"] += a["value_eur"] or 0
         for h in other:
             g = groups.setdefault(h["kind"], {"items": [], "total": 0})
-            g["items"].append({"label": h["label"], "value_eur": h["value_eur"], "detail": h["comment"], "slug": h["slug"]})
+            g["items"].append(
+                {"label": h["label"], "value_eur": h["value_eur"], "detail": h["comment"], "slug": h["slug"]}
+            )
             g["total"] += h["value_eur"] or 0
-        p["wealth"] = {"decl": d, "groups": groups,
-                       "net": sum(g["total"] for g in groups.values())}
+        p["wealth"] = {"decl": d, "groups": groups, "net": sum(g["total"] for g in groups.values())}
 
     p["deports"] = _rows(
         conn,
@@ -536,7 +569,9 @@ def person(conn: sqlite3.Connection, slug: str) -> dict | None:
            WHERE d.person_id = ? ORDER BY d.date DESC""",
         (pid,),
     )
-    p["pending"] = _rows(conn, "SELECT doc_code, filed, status FROM pending_filing WHERE person_id = ? ORDER BY filed DESC", (pid,))
+    p["pending"] = _rows(
+        conn, "SELECT doc_code, filed, status FROM pending_filing WHERE person_id = ? ORDER BY filed DESC", (pid,)
+    )
     p["memberships"] = _rows(
         conn,
         """SELECT o.kind, o.label, MIN(m.role) AS role, MIN(m.start_date) AS start_date
@@ -579,12 +614,15 @@ def company(conn: sqlite3.Connection, slug: str) -> dict | None:
     if c is None:
         return None
     cid = c["id"]
-    c["sectors"] = [sectors.SECTORS[r["sector"]] for r in conn.execute(
-        "SELECT sector FROM company_sector WHERE company_id = ?", (cid,)) if r["sector"] in sectors.SECTORS]
+    c["sectors"] = [
+        sectors.SECTORS[r["sector"]]
+        for r in conn.execute("SELECT sector FROM company_sector WHERE company_id = ?", (cid,))
+        if r["sector"] in sectors.SECTORS
+    ]
     c["holders"] = _rows(
         conn,
         f"""SELECT {_PERSON_COLS}, SUM(h.value_eur) AS value, SUM(h.shares) AS shares, MAX(h.capital_pct) AS pct,
-                   d.filed_at, d.status,
+                   d.filed_at,
                    (SELECT MIN(d2.filed_at) FROM declaration d2 JOIN holding h2 ON h2.declaration_id = d2.id
                     WHERE d2.person_id = p.id AND h2.company_id = h.company_id) AS since
             FROM holding h
@@ -603,8 +641,17 @@ def company(conn: sqlite3.Connection, slug: str) -> dict | None:
     by_group: dict[str, dict] = {}
     for h in c["holders"]:
         key = h["group_code"] or labels.CHAMBERS.get(h["chamber"], "Autres")
-        g = by_group.setdefault(key, {"label": key, "color": h["group_color"], "color_dark": h["group_color_dark"],
-                                      "slug": h["group_slug"], "n": 0, "value": 0})
+        g = by_group.setdefault(
+            key,
+            {
+                "label": key,
+                "color": h["group_color"],
+                "color_dark": h["group_color_dark"],
+                "slug": h["group_slug"],
+                "n": 0,
+                "value": 0,
+            },
+        )
         g["n"] += 1
         g["value"] += h["value"] or 0
     c["by_group"] = sorted(by_group.values(), key=lambda g: (-g["n"], -g["value"]))
@@ -662,13 +709,20 @@ def company(conn: sqlite3.Connection, slug: str) -> dict | None:
 
 
 def bill(conn: sqlite3.Connection, slug: str) -> dict | None:
-    b = _one(conn, "SELECT b.*, o.label AS committee FROM bill b LEFT JOIN organe o ON o.uid = b.committee_uid WHERE b.slug = ?", (slug,))
+    b = _one(
+        conn,
+        "SELECT b.*, o.label AS committee FROM bill b LEFT JOIN organe o ON o.uid = b.committee_uid WHERE b.slug = ?",
+        (slug,),
+    )
     if b is None:
         return None
     bid = b["id"]
     b["short"] = labels.short_bill(b["title"], 110)
-    b["sectors"] = [sectors.SECTORS[r["sector"]] for r in conn.execute(
-        "SELECT sector FROM bill_sector WHERE bill_id = ?", (bid,)) if r["sector"] in sectors.SECTORS]
+    b["sectors"] = [
+        sectors.SECTORS[r["sector"]]
+        for r in conn.execute("SELECT sector FROM bill_sector WHERE bill_id = ?", (bid,))
+        if r["sector"] in sectors.SECTORS
+    ]
     b["roles"] = _rows(
         conn,
         f"""SELECT GROUP_CONCAT(br.role, ' et ') AS bill_role, {_PERSON_COLS}
@@ -677,7 +731,11 @@ def bill(conn: sqlite3.Connection, slug: str) -> dict | None:
             GROUP BY p.id ORDER BY MAX(br.role) DESC, p.nom""",
         (bid,),
     )
-    b["companies"] = _rows(conn, "SELECT c.slug, c.name FROM bill_company bc JOIN company c ON c.id = bc.company_id WHERE bc.bill_id = ?", (bid,))
+    b["companies"] = _rows(
+        conn,
+        "SELECT c.slug, c.name FROM bill_company bc JOIN company c ON c.id = bc.company_id WHERE bc.bill_id = ?",
+        (bid,),
+    )
     b["signals"], b["n_signals"] = signals(conn, scope="tous", bill_id=bid, limit=60)
     b["lobby"] = _rows(
         conn,
@@ -709,36 +767,24 @@ def bill(conn: sqlite3.Connection, slug: str) -> dict | None:
     return b
 
 
-def bills_list(conn: sqlite3.Connection, *, sector: str | None = None, q: str | None = None,
-               exposed: bool = False, limit: int = 50, offset: int = 0) -> tuple[list[dict], int]:
-    where, params = ["1 = 1"], []
-    if sector:
-        where.append("EXISTS (SELECT 1 FROM bill_sector bs WHERE bs.bill_id = b.id AND bs.sector = ?)")
-        params.append(sector)
-    if q:
-        where.append("b.search_key LIKE ?")
-        params.append(f"%{fold(q)}%")
-    if exposed:
-        where.append("EXISTS (SELECT 1 FROM signal s WHERE s.bill_id = b.id AND s.level <> 'info')")
-    clause = " AND ".join(where)
-    total = conn.execute(f"SELECT COUNT(*) FROM bill b WHERE {clause}", params).fetchone()[0]
+def bills_list(conn: sqlite3.Connection) -> list[dict]:
+    """Every bill with a roll call, most exposed first."""
     rows = _rows(
         conn,
-        f"""SELECT b.id, b.slug, b.title, b.legislature, b.n_scrutins, b.first_vote, b.last_vote, b.transversal, b.budget,
-                   (SELECT GROUP_CONCAT(sector) FROM bill_sector bs WHERE bs.bill_id = b.id) AS sectors,
-                   (SELECT COUNT(DISTINCT s.person_id) FROM signal s WHERE s.bill_id = b.id AND s.level <> 'info') AS n_people,
-                   (SELECT MAX(s.score) FROM signal s WHERE s.bill_id = b.id AND s.level <> 'info') AS top_score,
-                   (SELECT COUNT(DISTINCT a.org_id) FROM bill_lobby bl JOIN lobby_action a ON a.id = bl.action_id
-                    WHERE bl.bill_id = b.id) AS n_orgs
-            FROM bill b WHERE {clause}
-            ORDER BY n_people DESC, b.last_vote DESC LIMIT ? OFFSET ?""",
-        [*params, limit, offset],
+        """SELECT b.id, b.slug, b.title, b.search_key, b.legislature, b.n_scrutins, b.first_vote, b.last_vote,
+                  b.transversal, b.budget,
+                  (SELECT GROUP_CONCAT(sector) FROM bill_sector bs WHERE bs.bill_id = b.id) AS sectors,
+                  (SELECT COUNT(DISTINCT s.person_id) FROM signal s WHERE s.bill_id = b.id AND s.level <> 'info') AS n_people,
+                  (SELECT MAX(s.score) FROM signal s WHERE s.bill_id = b.id AND s.level <> 'info') AS top_score,
+                  (SELECT COUNT(DISTINCT a.org_id) FROM bill_lobby bl JOIN lobby_action a ON a.id = bl.action_id
+                   WHERE bl.bill_id = b.id) AS n_orgs
+           FROM bill b ORDER BY n_people DESC, b.last_vote DESC, b.id""",
     )
     for r in rows:
         r["short"] = labels.short_bill(r["title"], 110)
         r["level"] = level_of(r["top_score"])
         r["sector_list"] = [sectors.SECTORS[s] for s in (r["sectors"] or "").split(",") if s in sectors.SECTORS]
-    return rows, total
+    return rows
 
 
 # ---------------------------------------------------------------------------
@@ -746,59 +792,36 @@ def bills_list(conn: sqlite3.Connection, *, sector: str | None = None, q: str | 
 # ---------------------------------------------------------------------------
 
 
-def people_list(conn: sqlite3.Connection, *, scope: str, q: str | None = None, group: str | None = None,
-                sort: str = "signals", limit: int = 60, offset: int = 0) -> tuple[list[dict], int]:
-    where, params = [scope_sql(scope)], []
-    if q:
-        where.append("p.search_key LIKE ?")
-        params.append(f"%{fold(q)}%")
-    if group:
-        where.append("g.slug = ?")
-        params.append(group)
-    clause = " AND ".join(where)
-    order = {
-        "signals": "p.top_score DESC, p.n_signals DESC, p.portfolio_eur DESC",
-        "portfolio": "p.portfolio_eur DESC",
-        "name": "p.nom, p.prenom",
-    }.get(sort, "p.top_score DESC, p.portfolio_eur DESC")
-    total = conn.execute(
-        f"SELECT COUNT(*) FROM person p LEFT JOIN groupe g ON g.id = p.group_id WHERE {clause}", params
-    ).fetchone()[0]
+def people_list(conn: sqlite3.Connection, scope: str) -> list[dict]:
+    """Everyone in scope, strongest signal first."""
     rows = _rows(
         conn,
         f"""SELECT {_PERSON_COLS} FROM person p LEFT JOIN groupe g ON g.id = p.group_id
-            WHERE {clause} ORDER BY {order}, p.nom LIMIT ? OFFSET ?""",
-        [*params, limit, offset],
+            WHERE {scope_sql(scope)}
+            ORDER BY p.top_score DESC, p.n_signals DESC, p.portfolio_eur DESC, p.nom, p.prenom""",
     )
     for r in rows:
         r["level"] = level_of(r["top_score"])
-    return rows, total
+    return rows
 
 
-def companies_list(conn: sqlite3.Connection, *, scope: str, sector: str | None = None, q: str | None = None,
-                   sort: str = "holders", limit: int = 60, offset: int = 0) -> tuple[list[dict], int]:
-    where, params = ["c.kind <> 'fund'"], []
-    if sector:
-        where.append("EXISTS (SELECT 1 FROM company_sector cs WHERE cs.company_id = c.id AND cs.sector = ?)")
-        params.append(sector)
-    if q:
-        where.append("c.search_key LIKE ?")
-        params.append(f"%{fold(q)}%")
-    clause = " AND ".join(where)
-    order = "total DESC" if sort == "value" else "n DESC, total DESC"
-    sql = f"""SELECT c.id, c.slug, c.name, c.kind, c.ticker, COUNT(DISTINCT p.id) AS n, COALESCE(SUM(h.value_eur), 0) AS total,
-                     (SELECT GROUP_CONCAT(sector) FROM company_sector cs WHERE cs.company_id = c.id) AS sectors,
-                     (SELECT COUNT(*) FROM lobby_org o WHERE o.company_id = c.id) AS lobby,
-                     (SELECT COUNT(*) FROM signal s WHERE s.company_id = c.id AND s.level <> 'info') AS n_signals
-              FROM holding h JOIN person p ON p.current_decl_id = h.declaration_id
-              JOIN company c ON c.id = h.company_id
-              WHERE h.kind = 'participation' AND {scope_sql(scope)} AND {clause}
-              GROUP BY c.id"""
-    total = conn.execute(f"SELECT COUNT(*) FROM ({sql})", params).fetchone()[0]
-    rows = _rows(conn, f"{sql} ORDER BY {order} LIMIT ? OFFSET ?", [*params, limit, offset])
+def companies_list(conn: sqlite3.Connection, scope: str) -> list[dict]:
+    """Companies held by someone in scope (latest declarations), most held first."""
+    rows = _rows(
+        conn,
+        f"""SELECT c.id, c.slug, c.name, c.search_key, c.kind, c.ticker, COUNT(DISTINCT p.id) AS n,
+                   COALESCE(SUM(h.value_eur), 0) AS total,
+                   (SELECT GROUP_CONCAT(sector) FROM company_sector cs WHERE cs.company_id = c.id) AS sectors,
+                   (SELECT COUNT(*) FROM lobby_org o WHERE o.company_id = c.id) AS lobby,
+                   (SELECT COUNT(*) FROM signal s WHERE s.company_id = c.id AND s.level <> 'info') AS n_signals
+            FROM holding h JOIN person p ON p.current_decl_id = h.declaration_id
+            JOIN company c ON c.id = h.company_id
+            WHERE h.kind = 'participation' AND c.kind <> 'fund' AND {scope_sql(scope)}
+            GROUP BY c.id ORDER BY n DESC, total DESC, c.name""",
+    )
     for r in rows:
         r["sector_list"] = [sectors.SECTORS[s] for s in (r["sectors"] or "").split(",") if s in sectors.SECTORS]
-    return rows, total
+    return rows
 
 
 def group(conn: sqlite3.Connection, slug: str) -> dict | None:
@@ -832,69 +855,103 @@ def group(conn: sqlite3.Connection, slug: str) -> dict | None:
 
 
 # ---------------------------------------------------------------------------
-# Search and network
+# Data the browser searches and filters itself
 # ---------------------------------------------------------------------------
 
 
-def search(conn: sqlite3.Connection, q: str, limit: int = 8) -> list[dict]:
-    f = fold(q)
-    if len(f) < 2:
-        return []
-    like = f"%{f}%"
+def search_index(conn: sqlite3.Connection) -> list[dict]:
+    """Everything the search box can find, best matches first within each type.
+
+    Keys are short because the whole list is shipped to the browser:
+    t type, l label, s sub-label, u url, k folded text to match against.
+    """
     out: list[dict] = []
     for r in conn.execute(
-        """SELECT p.slug, p.prenom, p.nom, p.role, g.code, g.color, g.color_dark FROM person p
-           LEFT JOIN groupe g ON g.id = p.group_id WHERE p.search_key LIKE ?
-           ORDER BY p.active DESC, (p.chamber IN ('an', 'senat', 'gouv')) DESC, p.top_score DESC, p.nom LIMIT ?""",
-        (like, limit),
+        """SELECT p.slug, p.prenom, p.nom, p.role, p.search_key, g.code FROM person p
+           LEFT JOIN groupe g ON g.id = p.group_id
+           ORDER BY p.active DESC, (p.chamber IN ('an', 'senat', 'gouv')) DESC, p.top_score DESC, p.nom, p.prenom"""
     ):
-        out.append({"type": "Élu", "label": f"{r['prenom']} {r['nom']}", "sub": r["role"] or "",
-                    "url": f"/personne/{r['slug']}", "code": r["code"], "color": r["color"], "color_dark": r["color_dark"]})
+        sub = " · ".join(x for x in (r["code"], r["role"]) if x)
+        out.append(
+            {
+                "t": "Élu",
+                "l": f"{r['prenom']} {r['nom']}",
+                "s": sub,
+                "u": f"/personne/{r['slug']}/",
+                "k": r["search_key"],
+            }
+        )
     for r in conn.execute(
-        """SELECT slug, name, n_holders FROM company WHERE search_key LIKE ? AND kind <> 'fund'
-           ORDER BY n_holders DESC, name LIMIT ?""",
-        (like, 5),
+        """SELECT slug, name, search_key, n_holders FROM company WHERE kind <> 'fund'
+           ORDER BY n_holders DESC, name"""
     ):
-        out.append({"type": "Société", "label": r["name"], "url": f"/societe/{r['slug']}",
-                    "sub": f"{r['n_holders']} détenteur{'s' if r['n_holders'] != 1 else ''}"})
-    for r in conn.execute(
-        "SELECT slug, title, legislature FROM bill WHERE search_key LIKE ? ORDER BY n_scrutins DESC LIMIT ?",
-        (like, 5),
-    ):
-        out.append({"type": "Texte", "label": labels.short_bill(r["title"], 80), "url": f"/texte/{r['slug']}",
-                    "sub": f"{r['legislature']}e législature"})
+        n = r["n_holders"]
+        out.append(
+            {
+                "t": "Société",
+                "l": r["name"],
+                "s": f"{n} détenteur{'s' if n != 1 else ''}",
+                "u": f"/societe/{r['slug']}/",
+                "k": r["search_key"],
+            }
+        )
+    for r in conn.execute("SELECT slug, title, search_key, legislature FROM bill ORDER BY n_scrutins DESC, id"):
+        out.append(
+            {
+                "t": "Texte",
+                "l": labels.short_bill(r["title"], 80),
+                "s": f"{r['legislature']}e législature",
+                "u": f"/texte/{r['slug']}/",
+                "k": r["search_key"],
+            }
+        )
     return out
 
 
-def network(conn: sqlite3.Connection, scope: str, *, sector: str | None = None, min_holders: int = 3,
-            min_value: int = 0) -> dict:
-    """Bipartite graph: people on one side, the companies several of them hold on the other."""
-    where, params = [scope_sql(scope), "c.kind NOT IN ('fund', 'coop_bank')", "h.kind = 'participation'"], []
-    if sector:
-        where.append("EXISTS (SELECT 1 FROM company_sector cs WHERE cs.company_id = c.id AND cs.sector = ?)")
-        params.append(sector)
-    if min_value:
-        where.append("COALESCE(h.value_eur, 0) >= ?")
-        params.append(min_value)
+def network(conn: sqlite3.Connection, scope: str) -> dict:
+    """Bipartite graph: people, and the companies at least two of them hold.
+
+    The browser narrows it further (sector, minimum number of holders).
+    """
     rows = _rows(
         conn,
         f"""SELECT p.id AS pid, p.slug AS pslug, p.prenom, p.nom, p.top_score, g.code, g.color, g.color_dark,
-                   c.id AS cid, c.slug, c.name, c.kind, SUM(h.value_eur) AS value
+                   c.id AS cid, c.slug, c.name, SUM(h.value_eur) AS value,
+                   (SELECT GROUP_CONCAT(sector) FROM company_sector cs WHERE cs.company_id = c.id) AS sectors
             FROM holding h JOIN person p ON p.current_decl_id = h.declaration_id
             JOIN company c ON c.id = h.company_id LEFT JOIN groupe g ON g.id = p.group_id
-            WHERE {' AND '.join(where)} GROUP BY p.id, c.id""",
-        params,
+            WHERE {scope_sql(scope)} AND c.kind NOT IN ('fund', 'coop_bank') AND h.kind = 'participation'
+            GROUP BY p.id, c.id ORDER BY c.id, p.id""",
     )
-    counts = defaultdict(int)
+    counts: dict[int, int] = defaultdict(int)
     for r in rows:
         counts[r["cid"]] += 1
-    rows = [r for r in rows if counts[r["cid"]] >= min_holders]
     nodes, links = {}, []
     for r in rows:
-        nodes.setdefault(f"p{r['pid']}", {"id": f"p{r['pid']}", "type": "person", "label": f"{r['prenom']} {r['nom']}",
-                                          "url": f"/personne/{r['pslug']}", "code": r["code"], "color": r["color"],
-                                          "color_dark": r["color_dark"], "level": level_of(r["top_score"])})
-        nodes.setdefault(f"c{r['cid']}", {"id": f"c{r['cid']}", "type": "company", "label": r["name"],
-                                          "url": f"/societe/{r['slug']}", "n": counts[r["cid"]]})
-        links.append({"source": f"p{r['pid']}", "target": f"c{r['cid']}", "value": r["value"] or 0})
+        if counts[r["cid"]] < 2:
+            continue
+        nodes.setdefault(
+            f"p{r['pid']}",
+            {
+                "id": f"p{r['pid']}",
+                "type": "person",
+                "label": f"{r['prenom']} {r['nom']}",
+                "url": f"/personne/{r['pslug']}/",
+                "code": r["code"],
+                "color": r["color"],
+                "color_dark": r["color_dark"],
+            },
+        )
+        nodes.setdefault(
+            f"c{r['cid']}",
+            {
+                "id": f"c{r['cid']}",
+                "type": "company",
+                "label": r["name"],
+                "url": f"/societe/{r['slug']}/",
+                "n": counts[r["cid"]],
+                "sectors": (r["sectors"] or "").split(",") if r["sectors"] else [],
+            },
+        )
+        links.append({"source": f"p{r['pid']}", "target": f"c{r['cid']}"})
     return {"nodes": list(nodes.values()), "links": links}

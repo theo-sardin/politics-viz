@@ -14,9 +14,6 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = Path(os.environ.get("PV_DATA_DIR", ROOT / "data"))
 RAW_DIR = DATA_DIR / "raw"
 DB_PATH = Path(os.environ.get("POLITICS_DB", DATA_DIR / "pv.sqlite"))
-# Pre-rewrite database. HATVP withdraws declarations once a mandate ends, so
-# this file holds declarations that can no longer be downloaded.
-LEGACY_DB_PATH = Path(os.environ.get("PV_LEGACY_DB", DATA_DIR / "archive" / "legacy.sqlite"))
 
 LEGISLATURES = (16, 17)
 CURRENT_LEGISLATURE = 17

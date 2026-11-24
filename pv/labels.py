@@ -186,7 +186,7 @@ def short_bill(title: str, limit: int = 72) -> str:
             break
     m = _FILLER.match(t)
     if m:
-        rest = _ARTICLE.sub("", t[m.end():], count=1)
+        rest = _ARTICLE.sub("", t[m.end() :], count=1)
         t = f"{m.group(1)} {rest}"
     t = _TAIL.split(t, maxsplit=1)[0]
     if len(t) > limit:

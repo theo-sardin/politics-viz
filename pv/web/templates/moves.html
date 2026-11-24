@@ -7,28 +7,26 @@
         <h1>Mouvements de titres</h1>
         <p class="lede">En France, aucun élu ne déclare ses achats et ventes au fil de l'eau. Ces mouvements sont déduits de l'écart entre deux déclarations successives d'une même personne : on sait dans quelle fenêtre une ligne est apparue, a disparu ou a changé de taille, pas le jour exact.</p>
     </div>
-    {{ m.scope_tabs(scope, url_with) }}
+    {{ m.scope_tabs(scope, 'mouvements') }}
 </div>
-<form class="filters" method="get" action="/mouvements">
-    <input type="hidden" name="scope" value="{{ scope }}">
+<form class="filters" data-filters>
     <div class="seg" role="group" aria-label="Type de mouvement">
-        <a href="{{ url_with(type=None) }}" class="{{ 'on' if not filters.type }}">Tous</a>
-        {% for k, label in labels.CHANGES.items() %}<a href="{{ url_with(type=k) }}" class="{{ 'on' if filters.type == k }}">{{ label }}s</a>{% endfor %}
+        <button type="button" data-set="type" data-value="" class="on">Tous</button>
+        {% for k, label in labels.CHANGES.items() %}<button type="button" data-set="type" data-value="{{ k }}">{{ label }}s</button>{% endfor %}
     </div>
-    {% if filters.type %}<input type="hidden" name="type" value="{{ filters.type }}">{% endif %}
-    <div class="grow"><input type="search" name="q" value="{{ filters.q }}" placeholder="Filtrer par élu ou société…" aria-label="Filtrer les mouvements"></div>
-    <button class="btn" type="submit">Filtrer</button>
+    <div class="grow"><input type="search" name="q" data-filter placeholder="Filtrer par élu ou société…" aria-label="Filtrer les mouvements"></div>
+    <span class="muted small" data-count></span>
 </form>
 <section class="card">
     {% if rows %}
     <div class="tbl-wrap">
     <table>
         <thead><tr><th>Élu</th><th>Société</th><th>Mouvement</th><th class="num">Titres</th><th class="num">Valeur déclarée</th><th>Entre les déclarations du</th></tr></thead>
-        <tbody>{{ m.move_rows(rows) }}</tbody>
+        <tbody data-list data-page-size="60">{{ m.move_rows(rows, page_size=60) }}</tbody>
     </table>
     </div>
+    {{ m.list_foot('Aucun mouvement ne correspond à ces filtres.') }}
     <p class="note">« Entrée » et « sortie » : la ligne figure dans une seule des deux déclarations. « Renforcement » et « allègement » : le nombre de titres a changé de plus de 10 % ; à défaut de nombre de titres, la valeur déclarée a varié de plus de 60 %, ce qui peut aussi refléter le cours. Survolez un mouvement pour savoir sur quoi il est établi.</p>
-    {% else %}<p class="empty">Aucun mouvement ne correspond à ces filtres.</p>{% endif %}
+    {% else %}<p class="empty">Aucun mouvement détecté dans ce périmètre.</p>{% endif %}
 </section>
-{{ m.pager(pg, url_with) }}
 {% endblock %}

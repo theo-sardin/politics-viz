@@ -7,13 +7,35 @@
     const count = document.getElementById("net-count");
     if (!svgEl || !window.d3) return;
 
-    let data;
+    const BASE = document.documentElement.dataset.base || "";
+    const form = document.getElementById("net-filters");
+    const params = new URLSearchParams(location.search);
+    ["secteur", "min"].forEach((name) => { if (params.has(name)) form.elements[name].value = params.get(name); });
+    // Changing a filter reloads the page with the choice in the query string: the layout is recomputed anyway.
+    form.addEventListener("change", () => {
+        const next = new URLSearchParams();
+        if (form.elements.secteur.value) next.set("secteur", form.elements.secteur.value);
+        next.set("min", form.elements.min.value);
+        location.search = next.toString();
+    });
+
+    let full;
     try {
-        data = await (await fetch(script.dataset.url)).json();
+        full = await (await fetch(BASE + script.dataset.url)).json();
     } catch (err) {
         count.textContent = "Chargement impossible.";
         return;
     }
+    // The file holds every company with two holders or more; narrow it here.
+    const sector = form.elements.secteur.value;
+    const min = parseInt(form.elements.min.value, 10) || 2;
+    const kept = new Set(full.nodes
+        .filter((n) => n.type === "company" && n.n >= min && (!sector || n.sectors.includes(sector)))
+        .map((n) => n.id));
+    const links = full.links.filter((l) => kept.has(l.target));
+    const linked = new Set(links.map((l) => l.source));
+    const data = { nodes: full.nodes.filter((n) => kept.has(n.id) || linked.has(n.id)), links };
+
     const people = data.nodes.filter((n) => n.type === "person");
     const companies = data.nodes.filter((n) => n.type === "company");
     count.textContent = `${people.length} élus · ${companies.length} sociétés · ${data.links.length} participations`;
@@ -84,8 +106,8 @@
     function clear() { node.classed("dim", false); link.classed("dim", false); }
     node.on("pointerenter", (e, d) => focus(d)).on("pointerleave", clear)
         .on("focus", (e, d) => focus(d)).on("blur", clear)
-        .on("click", (e, d) => { window.location = d.url; })
-        .on("keydown", (e, d) => { if (e.key === "Enter") window.location = d.url; });
+        .on("click", (e, d) => { window.location = BASE + d.url; })
+        .on("keydown", (e, d) => { if (e.key === "Enter") window.location = BASE + d.url; });
     node.call(d3.drag()
         .on("start", (e, d) => { if (!e.active) sim.alphaTarget(0.25).restart(); d.fx = d.x; d.fy = d.y; })
         .on("drag", (e, d) => { d.fx = e.x; d.fy = e.y; })

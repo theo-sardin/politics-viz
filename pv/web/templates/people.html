@@ -5,34 +5,32 @@
 <div class="page-head">
     <div>
         <h1>{{ scopes[scope][0] }}</h1>
-        <p class="lede">{{ pg.total | intfr }} personnes. Triées par défaut selon le signal le plus fort qui les concerne.</p>
+        <p class="lede">{{ rows | length | intfr }} personnes. Triées par défaut selon le signal le plus fort qui les concerne.</p>
     </div>
-    {{ m.scope_tabs(scope, url_with) }}
+    {{ m.scope_tabs(scope, 'elus') }}
 </div>
-<form class="filters" method="get" action="/elus">
-    <input type="hidden" name="scope" value="{{ scope }}">
+<form class="filters" data-filters>
     {% if groups %}
-    <select name="groupe" aria-label="Groupe politique">
+    <select name="groupe" data-filter aria-label="Groupe politique">
         <option value="">Tous les groupes</option>
-        {% for g in groups %}<option value="{{ g.slug }}" {{ 'selected' if filters.groupe == g.slug }}>{{ g.code }} — {{ g.label }}</option>{% endfor %}
+        {% for g in groups %}<option value="{{ g.slug }}">{{ g.code }} — {{ g.label }}</option>{% endfor %}
     </select>
     {% endif %}
-    <select name="tri" aria-label="Tri">
-        <option value="signals" {{ 'selected' if filters.tri == 'signals' }}>Signaux les plus forts</option>
-        <option value="portfolio" {{ 'selected' if filters.tri == 'portfolio' }}>Participations les plus élevées</option>
-        <option value="name" {{ 'selected' if filters.tri == 'name' }}>Ordre alphabétique</option>
+    <select name="tri" data-sort aria-label="Tri">
+        <option value="">Signaux les plus forts</option>
+        <option value="portfolio">Participations les plus élevées</option>
+        <option value="name" data-dir="asc">Ordre alphabétique</option>
     </select>
-    <div class="grow"><input type="search" name="q" value="{{ filters.q }}" placeholder="Filtrer par nom…" aria-label="Filtrer par nom"></div>
-    <button class="btn" type="submit">Filtrer</button>
+    <div class="grow"><input type="search" name="q" data-filter placeholder="Filtrer par nom…" aria-label="Filtrer par nom"></div>
+    <span class="muted small" data-count></span>
 </form>
 <section class="card">
-    {% if rows %}
     <div class="tbl-wrap">
     <table>
         <thead><tr><th>Nom</th><th>Groupe</th><th class="num">Participations déclarées</th><th class="num">Lignes</th><th class="num">Signaux</th><th>Niveau max.</th></tr></thead>
-        <tbody>
+        <tbody data-list data-page-size="60">
         {% for r in rows %}
-        <tr>
+        <tr data-item data-groupe="{{ r.group_slug or '' }}" data-text="{{ r.pkey }}" data-sort-portfolio="{{ r.portfolio_eur }}" data-sort-name="{{ r.nom | lower }} {{ r.prenom | lower }}"{{ ' hidden' if loop.index > 60 }}>
             <td>{{ m.who(r) }}</td>
             <td>{{ m.grp(r) }}</td>
             <td class="num">{{ r.portfolio_eur | eur if r.n_holdings else '—' }}</td>
@@ -44,7 +42,6 @@
         </tbody>
     </table>
     </div>
-    {% else %}<p class="empty">Personne ne correspond à ces filtres.</p>{% endif %}
+    {{ m.list_foot('Personne ne correspond à ces filtres.') }}
 </section>
-{{ m.pager(pg, url_with) }}
 {% endblock %}

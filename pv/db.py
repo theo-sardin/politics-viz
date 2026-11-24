@@ -1,7 +1,7 @@
 """SQLite schema and connection helper.
 
 The database is a build artefact: ``pv sync`` recreates it from the raw
-sources (plus the legacy archive), so there are no migrations. Bump
+sources and nothing else, so there are no migrations. Bump
 ``SCHEMA_VERSION`` when a table changes and the next sync rebuilds.
 """
 
@@ -10,7 +10,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 # Vote positions are stored as small integers: the vote table has millions of rows.
 POUR, CONTRE, ABSTENTION, NON_VOTANT = 1, 2, 3, 0
@@ -82,7 +82,6 @@ CREATE TABLE IF NOT EXISTS declaration (
     mandate_label    TEXT,
     mandate_start    TEXT,
     source_file      TEXT,
-    status           TEXT NOT NULL,        -- published | archived
     no_holdings      INTEGER NOT NULL DEFAULT 0,
     note             TEXT
 );

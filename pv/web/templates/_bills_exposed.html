@@ -4,7 +4,7 @@
     <tbody>
     {% for b in data.bills %}
     <tr>
-        <td><a href="/texte/{{ b.slug }}">{{ b.short }}</a><span class="muted small"> · {{ b.n_scrutins }} scrutins</span></td>
+        <td><a href="/texte/{{ b.slug }}/">{{ b.short }}</a><span class="muted small"> · {{ b.n_scrutins }} scrutins</span></td>
         <td class="num">{{ b.n_people }}</td>
         <td>{{ m.level(b.level) }}</td>
     </tr>

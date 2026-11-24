@@ -10,7 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import httpx
@@ -142,7 +142,7 @@ def _download(src: config.Source, path: Path, headers: dict, meta: dict | None =
                 "url": src.url,
                 "etag": response_headers.get("etag"),
                 "last_modified": response_headers.get("last-modified"),
-                "fetched_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                "fetched_at": datetime.now(UTC).isoformat(timespec="seconds"),
                 "bytes": done,
             }
         )

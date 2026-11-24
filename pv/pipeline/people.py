@@ -22,8 +22,8 @@ from dataclasses import dataclass
 from difflib import SequenceMatcher
 from pathlib import Path
 
-from pv import companies, config
-from pv.sources import hatvp, legacy
+from pv import companies
+from pv.sources import hatvp
 from pv.text import fold, name_key, titlecase_name
 
 log = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ def _one_edit_apart(a: str, b: str) -> bool:
     if len(a) != 10 or len(b) != 10:
         return False
     pa, pb = a.split("-"), b.split("-")
-    return sum(x != y for x, y in zip(pa, pb)) == 1
+    return sum(x != y for x, y in zip(pa, pb, strict=True)) == 1
 
 
 class People:
@@ -95,8 +95,18 @@ class People:
             """INSERT INTO person(hatvp_slug, an_id, senat_id, civilite, prenom, nom, name_key,
                                   search_key, birth_date, photo_url)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (hatvp_slug, an_id, senat_id, _civ(civilite), prenom_d, nom_d, key,
-             fold(f"{prenom} {nom}"), birth, photo_url),
+            (
+                hatvp_slug,
+                an_id,
+                senat_id,
+                _civ(civilite),
+                prenom_d,
+                nom_d,
+                key,
+                fold(f"{prenom} {nom}"),
+                birth,
+                photo_url,
+            ),
         )
         pid = cur.lastrowid
         if hatvp_slug:
@@ -243,8 +253,9 @@ class HatvpIndex:
         day, family = rec.filed_at[:10], _family(rec.doc_code)
         hits = self.by_filing.get((key, day, family), [])
         if not hits:
-            hits = [r for r in self.by_date.get((day, family), [])
-                    if names_compatible(rec.nom, rec.prenom, r.nom, r.prenom)]
+            hits = [
+                r for r in self.by_date.get((day, family), []) if names_compatible(rec.nom, rec.prenom, r.nom, r.prenom)
+            ]
         slugs = {h.hatvp_slug for h in hits}
         if len(slugs) == 1:
             same_kind = [h for h in hits if h.mandate_kind == rec.mandate_kind]
@@ -266,9 +277,8 @@ def load_declarations(
     store: CompanyStore,
     xml_path: Path,
     index: HatvpIndex,
-    legacy_path: Path | None = None,
 ) -> dict[str, int]:
-    stats = {"declarations": 0, "archived": 0, "holdings": 0, "interests": 0, "people": 0, "unmatched_index": 0}
+    stats = {"declarations": 0, "holdings": 0, "interests": 0, "people": 0, "unmatched_index": 0}
     seen: set[str] = set()
 
     def person_for(rec: hatvp.Declaration) -> tuple[int, hatvp.IndexRow | None]:
@@ -305,17 +315,27 @@ def load_declarations(
             stats["people"] += 1
         return pid, None
 
-    def insert(rec: hatvp.Declaration, status: str) -> None:
+    def insert(rec: hatvp.Declaration) -> None:
         pid, row = person_for(rec)
         cur = conn.execute(
             """INSERT INTO declaration(person_id, uuid, doc_type, is_modification, filed_at, published_at,
-                                       mandate_kind, mandate_label, mandate_start, source_file, status,
+                                       mandate_kind, mandate_label, mandate_start, source_file,
                                        no_holdings, note)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (pid, rec.uuid, rec.doc_type,
-             int(row.doc_code.endswith("m") if row else rec.is_modification), rec.filed_at,
-             row.published if row else None, rec.mandate_kind, rec.mandate_label, rec.mandate_start,
-             row.source_file if row else None, status, int(rec.no_holdings), rec.note),
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (
+                pid,
+                rec.uuid,
+                rec.doc_type,
+                int(row.doc_code.endswith("m") if row else rec.is_modification),
+                rec.filed_at,
+                row.published if row else None,
+                rec.mandate_kind,
+                rec.mandate_label,
+                rec.mandate_start,
+                row.source_file if row else None,
+                int(rec.no_holdings),
+                rec.note,
+            ),
         )
         did = cur.lastrowid
         for h in rec.holdings:
@@ -334,8 +354,19 @@ def load_declarations(
                 """INSERT INTO holding(declaration_id, kind, raw_name, label, company_id, value_eur, shares,
                                        capital_pct, income, comment, sectors)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (did, h.kind, h.raw_name, ref.name, store.get(ref), h.value_eur, h.shares, h.capital_pct,
-                 h.income, h.comment, ",".join(ref.sectors) or None),
+                (
+                    did,
+                    h.kind,
+                    h.raw_name,
+                    ref.name,
+                    store.get(ref),
+                    h.value_eur,
+                    h.shares,
+                    h.capital_pct,
+                    h.income,
+                    h.comment,
+                    ",".join(ref.sectors) or None,
+                ),
             )
             stats["holdings"] += 1
         for it in rec.interests:
@@ -346,9 +377,21 @@ def load_declarations(
                 """INSERT INTO interest(declaration_id, kind, org, org_key, company_id, description, person_name,
                                         start_date, end_date, kept, pay_json, pay_max, pay_basis)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (did, it.kind, it.org, org_key, store.get(ref) if known else None, it.description,
-                 it.person_name, it.start, it.end, None if it.kept is None else int(it.kept),
-                 json.dumps(it.pay) if it.pay else None, max((a for _, a in it.pay), default=None), it.pay_basis),
+                (
+                    did,
+                    it.kind,
+                    it.org,
+                    org_key,
+                    store.get(ref) if known else None,
+                    it.description,
+                    it.person_name,
+                    it.start,
+                    it.end,
+                    None if it.kept is None else int(it.kept),
+                    json.dumps(it.pay) if it.pay else None,
+                    max((a for _, a in it.pay), default=None),
+                    it.pay_basis,
+                ),
             )
             stats["interests"] += 1
         conn.executemany(
@@ -358,25 +401,18 @@ def load_declarations(
 
     # Declarations the index identifies go first: they create people under a
     # stable slug, so the looser name matches that follow have something to hit.
-    deferred: list[tuple[hatvp.Declaration, str]] = []
-
-    def feed(rec: hatvp.Declaration, status: str) -> None:
-        if rec.uuid in seen:
-            return
-        seen.add(rec.uuid)
-        stats["declarations" if status == "published" else "archived"] += 1
-        if index.match(rec)[0]:
-            insert(rec, status)
-        else:
-            deferred.append((rec, status))
-
+    deferred: list[hatvp.Declaration] = []
     for rec in hatvp.parse(xml_path):
-        feed(rec, "published")
-    if legacy_path is not None:
-        for rec in legacy.read_declarations(legacy_path, set(seen)):
-            feed(rec, "archived")
-    for rec, status in deferred:
-        insert(rec, status)
+        if rec.uuid in seen:
+            continue
+        seen.add(rec.uuid)
+        stats["declarations"] += 1
+        if index.match(rec)[0]:
+            insert(rec)
+        else:
+            deferred.append(rec)
+    for rec in deferred:
+        insert(rec)
 
     _load_pending(conn, people, index)
     return stats
@@ -398,16 +434,16 @@ def _load_pending(conn: sqlite3.Connection, people: People, index: HatvpIndex) -
 def assign_fallback_roles(conn: sqlite3.Connection, index: HatvpIndex) -> None:
     """Give a role to everyone no parliamentary or government roster covers.
 
-    Their latest declaration says what mandate they held; they count as
-    active while HATVP still publishes a declaration for it.
+    Their latest declaration says what mandate they hold. HATVP unpublishes a
+    declaration when the mandate ends, so having one at all means it is current;
+    only parliamentarians and ministers need the rosters to count as sitting.
     """
     rows = conn.execute(
         """SELECT p.id, p.hatvp_slug,
                   (SELECT d.mandate_kind FROM declaration d WHERE d.person_id = p.id
                    ORDER BY d.filed_at DESC LIMIT 1) AS kind,
                   (SELECT d.mandate_label FROM declaration d WHERE d.person_id = p.id
-                   ORDER BY d.filed_at DESC LIMIT 1) AS label,
-                  EXISTS (SELECT 1 FROM declaration d WHERE d.person_id = p.id AND d.status = 'published') AS live
+                   ORDER BY d.filed_at DESC LIMIT 1) AS label
            FROM person p WHERE p.chamber IS NULL"""
     ).fetchall()
     updates = []
@@ -422,8 +458,8 @@ def assign_fallback_roles(conn: sqlite3.Connection, index: HatvpIndex) -> None:
             same = [x for x in ip.rows if x.mandate_kind == kind and x.role]
             if same:
                 role = same[-1].role
-        # Former deputies, senators and ministers are not sitting any more.
-        active = int(bool(r["live"]) and chamber in ("europe", "local"))
+        # A deputy, senator or minister absent from the rosters is not sitting any more.
+        active = int(chamber in ("europe", "local"))
         updates.append((chamber, active, role, r["id"]))
     conn.executemany("UPDATE person SET chamber = ?, active = ?, role = ? WHERE id = ?", updates)
 
@@ -456,7 +492,3 @@ def assign_slugs(conn: sqlite3.Connection) -> None:
 
 def load_index(path: Path) -> HatvpIndex:
     return HatvpIndex(hatvp.parse_index(path))
-
-
-def default_legacy_path() -> Path | None:
-    return config.LEGACY_DB_PATH if config.LEGACY_DB_PATH.exists() else None

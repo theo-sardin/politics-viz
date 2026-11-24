@@ -9,11 +9,13 @@ dependencies = [
     "httpx>=0.27",
     "lxml>=5.3",
     "jinja2>=3.1",
+    "pillow>=10",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.3",
+    "ruff>=0.6",
 ]
 
 [project.scripts]
@@ -32,3 +34,14 @@ include = ["pv*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["ignore:Using `httpx` with `starlette.testclient` is deprecated"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "C4"]
+ignore = [
+    "E501",  # the formatter wraps what can be wrapped; long strings and SQL stay readable
+    "B008",  # FastAPI's Depends() in argument defaults is the framework's idiom
+]

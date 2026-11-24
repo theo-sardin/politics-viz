@@ -1,7 +1,7 @@
 <div>
     <span>
         {% if it.person_name %}<strong>{{ it.person_name }}</strong>{% if it.org %} · {% endif %}{% endif %}
-        {% if it.org %}{% if it.slug %}<a href="/societe/{{ it.slug }}"><strong>{{ it.org }}</strong></a>{% else %}<strong>{{ it.org }}</strong>{% endif %}{% endif %}
+        {% if it.org %}{% if it.slug %}<a href="/societe/{{ it.slug }}/"><strong>{{ it.org }}</strong></a>{% else %}<strong>{{ it.org }}</strong>{% endif %}{% endif %}
         {% if it.lobby %}<span class="chip" data-tip="Organisation inscrite au répertoire des représentants d'intérêts de la HATVP">lobby déclaré</span>{% endif %}
         {% if it.kept %}<span class="chip strong" data-tip="Activité déclarée comme conservée pendant le mandat">conservée</span>{% endif %}
     </span>

@@ -11,3 +11,6 @@ dist/
 
 # Downloaded sources, the built database and the legacy archive.
 data/
+
+# Local history backups.
+*.bundle

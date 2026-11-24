@@ -8,28 +8,26 @@
         <p class="lede">Les projets et propositions de loi ayant donné lieu à au moins un scrutin public à l'Assemblée nationale depuis 2022, classés par nombre d'élus qui y ont voté tout en déclarant un intérêt lié.</p>
     </div>
 </div>
-<form class="filters" method="get" action="/textes">
+<form class="filters" data-filters>
     <div class="seg" role="group" aria-label="Exposition">
-        <a href="{{ url_with(exposes=None) }}" class="{{ 'on' if not filters.exposes }}">Tous</a>
-        <a href="{{ url_with(exposes=1) }}" class="{{ 'on' if filters.exposes }}">Avec signaux</a>
+        <button type="button" data-set="exposes" data-value="" class="on">Tous</button>
+        <button type="button" data-set="exposes" data-value="1">Avec signaux</button>
     </div>
-    {% if filters.exposes %}<input type="hidden" name="exposes" value="1">{% endif %}
-    <select name="secteur" aria-label="Secteur">
+    <select name="secteur" data-filter aria-label="Secteur">
         <option value="">Tous les secteurs</option>
-        {% for s in sectors.values() %}<option value="{{ s.slug }}" {{ 'selected' if filters.secteur == s.slug }}>{{ s.label }}</option>{% endfor %}
+        {% for s in sectors.values() %}<option value="{{ s.slug }}">{{ s.label }}</option>{% endfor %}
     </select>
-    <div class="grow"><input type="search" name="q" value="{{ filters.q }}" placeholder="Filtrer par intitulé…" aria-label="Filtrer par intitulé"></div>
-    <button class="btn" type="submit">Filtrer</button>
+    <div class="grow"><input type="search" name="q" data-filter placeholder="Filtrer par intitulé…" aria-label="Filtrer par intitulé"></div>
+    <span class="muted small" data-count></span>
 </form>
 <section class="card">
-    {% if rows %}
     <div class="tbl-wrap">
     <table>
         <thead><tr><th>Texte</th><th>Secteur</th><th class="num">Scrutins</th><th>Dernier vote</th><th class="num" data-tip="Organisations dont une action de lobbying déclarée mentionne ce texte">Lobbies</th><th class="num">Élus concernés</th><th>Niveau max.</th></tr></thead>
-        <tbody>
+        <tbody data-list data-page-size="60">
         {% for b in rows %}
-        <tr>
-            <td><a href="/texte/{{ b.slug }}">{{ b.short }}</a> <span class="muted small">{{ b.legislature }}e lég.</span></td>
+        <tr data-item data-secteur="{{ (b.sectors or '') | replace(',', ' ') }}" data-exposes="{{ 1 if b.n_people else 0 }}" data-text="{{ b.search_key }}"{{ ' hidden' if loop.index > 60 }}>
+            <td><a href="/texte/{{ b.slug }}/">{{ b.short }}</a> <span class="muted small">{{ b.legislature }}e lég.</span></td>
             <td><span class="chips">{% for s in b.sector_list %}<span class="chip">{{ s.short }}</span>{% endfor %}{% if b.transversal %}<span class="chip" data-tip="Texte budgétaire ou fourre-tout : aucun lien sectoriel n'en est tiré">Transversal</span>{% endif %}</span></td>
             <td class="num">{{ b.n_scrutins }}</td>
             <td class="nowrap muted">{{ b.last_vote | date }}</td>
@@ -41,7 +39,6 @@
         </tbody>
     </table>
     </div>
-    {% else %}<p class="empty">Aucun texte ne correspond à ces filtres.</p>{% endif %}
+    {{ m.list_foot('Aucun texte ne correspond à ces filtres.') }}
 </section>
-{{ m.pager(pg, url_with) }}
 {% endblock %}

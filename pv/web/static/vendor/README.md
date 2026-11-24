@@ -1,0 +1,9 @@
+# Vendored scripts
+
+Served from our own origin so the site makes no third-party request.
+
+| File | Version | Source | SHA-256 | Licence |
+|---|---|---|---|---|
+| `d3.min.js` | 7.9.0 | `https://cdn.jsdelivr.net/npm/d3@7.9.0/dist/d3.min.js` (identical on cdnjs) | `f2094bbf6141b359722c4fe454eb6c4b0f0e42cc10cc7af921fc158fceb86539` | ISC, © 2010-2023 Mike Bostock |
+
+Only the network page (`/reseau`) loads it.

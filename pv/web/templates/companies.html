@@ -5,32 +5,30 @@
 <div class="page-head">
     <div>
         <h1>Sociétés détenues</h1>
-        <p class="lede">{{ pg.total | intfr }} sociétés figurent dans la dernière déclaration d'au moins une personne du périmètre.</p>
+        <p class="lede">{{ rows | length | intfr }} sociétés figurent dans la dernière déclaration d'au moins une personne du périmètre.</p>
     </div>
-    {{ m.scope_tabs(scope, url_with) }}
+    {{ m.scope_tabs(scope, 'societes') }}
 </div>
-<form class="filters" method="get" action="/societes">
-    <input type="hidden" name="scope" value="{{ scope }}">
-    <select name="secteur" aria-label="Secteur">
+<form class="filters" data-filters>
+    <select name="secteur" data-filter aria-label="Secteur">
         <option value="">Tous les secteurs</option>
-        {% for s in sectors.values() %}<option value="{{ s.slug }}" {{ 'selected' if filters.secteur == s.slug }}>{{ s.label }}</option>{% endfor %}
+        {% for s in sectors.values() %}<option value="{{ s.slug }}">{{ s.label }}</option>{% endfor %}
     </select>
-    <select name="tri" aria-label="Tri">
-        <option value="holders" {{ 'selected' if filters.tri == 'holders' }}>Par nombre de détenteurs</option>
-        <option value="value" {{ 'selected' if filters.tri == 'value' }}>Par valeur déclarée</option>
+    <select name="tri" data-sort aria-label="Tri">
+        <option value="">Par nombre de détenteurs</option>
+        <option value="value">Par valeur déclarée</option>
     </select>
-    <div class="grow"><input type="search" name="q" value="{{ filters.q }}" placeholder="Filtrer par nom…" aria-label="Filtrer par nom de société"></div>
-    <button class="btn" type="submit">Filtrer</button>
+    <div class="grow"><input type="search" name="q" data-filter placeholder="Filtrer par nom…" aria-label="Filtrer par nom de société"></div>
+    <span class="muted small" data-count></span>
 </form>
 <section class="card">
-    {% if rows %}
     <div class="tbl-wrap">
     <table>
         <thead><tr><th>Société</th><th>Secteur</th><th class="num">Détenteurs</th><th class="num">Valeur déclarée</th><th>Lobbying</th><th class="num">Signaux</th></tr></thead>
-        <tbody>
+        <tbody data-list data-page-size="60">
         {% for c in rows %}
-        <tr>
-            <td><a href="/societe/{{ c.slug }}">{{ c.name }}</a> <span class="muted small">{{ labels.COMPANY_KINDS[c.kind] | lower }}</span></td>
+        <tr data-item data-secteur="{{ (c.sectors or '') | replace(',', ' ') }}" data-text="{{ c.search_key }}" data-sort-value="{{ c.total }}"{{ ' hidden' if loop.index > 60 }}>
+            <td><a href="/societe/{{ c.slug }}/">{{ c.name }}</a> <span class="muted small">{{ labels.COMPANY_KINDS[c.kind] | lower }}</span></td>
             <td><span class="chips">{% for s in c.sector_list %}<span class="chip">{{ s.short }}</span>{% endfor %}</span></td>
             <td class="num">{{ c.n }}</td>
             <td class="num">{{ c.total | eur }}</td>
@@ -41,7 +39,6 @@
         </tbody>
     </table>
     </div>
-    {% else %}<p class="empty">Aucune société ne correspond à ces filtres.</p>{% endif %}
+    {{ m.list_foot('Aucune société ne correspond à ces filtres.') }}
 </section>
-{{ m.pager(pg, url_with) }}
 {% endblock %}

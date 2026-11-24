@@ -39,8 +39,12 @@ def test_budget_bills_match_on_acronym_and_year():
 
 
 def test_a_year_in_the_bills_name_must_be_the_year_in_the_text():
-    pat = bill_pattern(3, "Projet de loi relatif à l'organisation des jeux Olympiques et Paralympiques de 2030",
-                       "2025-05-01", "2026-01-10")
+    pat = bill_pattern(
+        3,
+        "Projet de loi relatif à l'organisation des jeux Olympiques et Paralympiques de 2030",
+        "2025-05-01",
+        "2026-01-10",
+    )
     assert _corpus("Jeux Olympiques et Paralympiques de Paris 2024 : hydrogène").match(pat) == []
     assert _corpus("Loi sur l'organisation des jeux Olympiques et Paralympiques de 2030").match(pat) == [0]
 

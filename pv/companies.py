@@ -50,6 +50,7 @@ def _k(slug: str, name: str, pattern: str, ticker: str | None, sectors: str, kin
 
 # Order matters: the first pattern that matches wins, so specific entries
 # (Dassault Systèmes, GDF Suez) come before the generic ones they contain.
+# fmt: off
 REGISTRY: list[Known] = [
     # --- énergie
     _k("totalenergies", "TotalEnergies", r"\btotal ?energie|\btotal (se|sa|fina|gabon)\b|^total$|\belf aquitaine\b", "TTE.PA", "energie"),
@@ -290,6 +291,8 @@ REGISTRY: list[Known] = [
     _k("ol-groupe", "Eagle Football Group (OL)", r"\bol groupe\b|\beagle football\b|\bolympique lyonnais\b", None, "medias"),
 ]
 
+# fmt: on
+
 _BY_SLUG = {k.slug: k for k in REGISTRY}
 
 
@@ -334,10 +337,43 @@ _TRAIL_WRAPPER = re.compile(
 _CORP_SUFFIX = re.compile(r" (sa|se|nv|plc|ag|inc|corp|spa|ltd|group|groupe|holding|international|intl)$")
 
 LEGAL_FORMS = (
-    "sc immobiliere", "societe civile immobiliere", "societe civile", "groupement foncier agricole",
-    "groupement forestier", "groupement foncier", "selarl", "selas", "sasu", "sarl", "eurl", "sccv",
-    "scpi", "scop", "scic", "scea", "gaec", "earl", "cuma", "spfpl", "sica", "sci", "sas", "snc",
-    "scp", "scm", "sca", "gfa", "gfv", "gfr", "gie", "sem", "spl", "sep", "sa", "sc", "gf",
+    "sc immobiliere",
+    "societe civile immobiliere",
+    "societe civile",
+    "groupement foncier agricole",
+    "groupement forestier",
+    "groupement foncier",
+    "selarl",
+    "selas",
+    "sasu",
+    "sarl",
+    "eurl",
+    "sccv",
+    "scpi",
+    "scop",
+    "scic",
+    "scea",
+    "gaec",
+    "earl",
+    "cuma",
+    "spfpl",
+    "sica",
+    "sci",
+    "sas",
+    "snc",
+    "scp",
+    "scm",
+    "sca",
+    "gfa",
+    "gfv",
+    "gfr",
+    "gie",
+    "sem",
+    "spl",
+    "sep",
+    "sa",
+    "sc",
+    "gf",
 )
 _FORM_CANON = {
     "societe civile immobiliere": "sci",
@@ -351,11 +387,40 @@ _FORM_RE = re.compile(r"\b(" + "|".join(LEGAL_FORMS) + r")\b")
 
 _STOP = {"de", "du", "des", "d", "la", "le", "les", "l", "et", "en", "au", "aux", "a"}
 _GENERIC = {
-    "", "parts sociales", "part sociale", "compte titre", "compte titres", "divers", "portefeuille",
-    "cooperative", "cooperative agricole", "banque", "pme", "holding", "societe", "entreprise",
-    "famille", "familiale", "immobilier", "immobiliere", "patrimoine", "investissement", "placement",
-    "actions", "action", "titres", "autres", "autre", "voir commentaire", "idem", "indivision",
-    "cours liquidation", "liquidation", "cours creation", "cours constitution", "familiale immobiliere",
+    "",
+    "parts sociales",
+    "part sociale",
+    "compte titre",
+    "compte titres",
+    "divers",
+    "portefeuille",
+    "cooperative",
+    "cooperative agricole",
+    "banque",
+    "pme",
+    "holding",
+    "societe",
+    "entreprise",
+    "famille",
+    "familiale",
+    "immobilier",
+    "immobiliere",
+    "patrimoine",
+    "investissement",
+    "placement",
+    "actions",
+    "action",
+    "titres",
+    "autres",
+    "autre",
+    "voir commentaire",
+    "idem",
+    "indivision",
+    "cours liquidation",
+    "liquidation",
+    "cours creation",
+    "cours constitution",
+    "familiale immobiliere",
 }
 
 _ACRONYM_KEEP = re.compile(r"^[A-Z0-9&]{2,5}$")

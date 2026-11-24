@@ -3,7 +3,7 @@
 {% block title %}{{ p.prenom }} {{ p.nom }}{% endblock %}
 {% block main %}
 {% set flagged = p.signals | rejectattr('level', 'equalto', 'info') | list %}
-<p class="crumb"><a href="/elus?scope={{ p.chamber if p.active and p.chamber in scopes else 'tous' }}">{{ labels.CHAMBERS.get(p.chamber, 'Déclarants') }}</a>{% if p.group_code %} › <a href="/groupe/{{ p.group_slug }}">{{ p.group_label }}</a>{% endif %}</p>
+<p class="crumb"><a href="{{ page_url('elus', scope) }}">{{ labels.CHAMBERS.get(p.chamber, 'Déclarants') }}</a>{% if p.group_code %} › <a href="/groupe/{{ p.group_slug }}/">{{ p.group_label }}</a>{% endif %}</p>
 
 <div class="profile">
     {{ m.avatar(p, lg=True) }}
@@ -61,7 +61,7 @@
                     <th>Société</th>
                     {% for d in p.series %}
                     <th class="num">{{ d.filed_at | date }}
-                        <span class="doc">{% if d.source_file %}<a href="{{ hatvp_files }}{{ d.source_file }}.pdf" target="_blank" rel="noopener">{{ d.doc_type }}{{ ' modif.' if d.is_modification }} ↗</a>{% else %}{{ d.doc_type }}{% if d.status == 'archived' %} · archivée{% endif %}{% endif %}</span>
+                        <span class="doc">{% if d.source_file %}<a href="{{ hatvp_files }}{{ d.source_file }}.pdf" target="_blank" rel="noopener">{{ d.doc_type }}{{ ' modif.' if d.is_modification }} ↗</a>{% else %}{{ d.doc_type }}{% endif %}</span>
                     </th>
                     {% endfor %}
                 </tr>
@@ -69,7 +69,7 @@
             <tbody>
             {% for l in p.lines %}
             <tr>
-                <td>{% if l.slug %}<a href="/societe/{{ l.slug }}">{{ l.name }}</a>{% else %}{{ l.name }}{% endif %}
+                <td>{% if l.slug %}<a href="/societe/{{ l.slug }}/">{{ l.name }}</a>{% else %}{{ l.name }}{% endif %}
                     {% if l.kind == 'listed' %}<span class="chip">cotée</span>{% elif l.kind == 'coop_bank' %}<span class="chip">mutualiste</span>{% elif l.kind == 'fund' %}<span class="chip">fonds</span>{% endif %}</td>
                 {% for d in p.series %}{% set c = l.cells.get(d.id) %}
                 {% if c and c.value is not none %}
@@ -137,7 +137,7 @@
         <div class="list">
             {% for b in p.bills %}
             <div>
-                <span><a href="/texte/{{ b.slug }}">{{ b.short }}</a> {{ m.level(b.level) }}</span>
+                <span><a href="/texte/{{ b.slug }}/">{{ b.short }}</a> {{ m.level(b.level) }}</span>
                 <span class="small muted">{{ m.votebar(b.n_pour, b.n_contre, b.n_abst) }} {{ b.n_votes }} scrutin{{ 's' if b.n_votes > 1 }}{% if b.n_dissent %} · {{ b.n_dissent }} à rebours du groupe{% endif %}{% if b.roles %} · {{ b.roles | replace(',', ', ') }}{% endif %}</span>
             </div>
             {% endfor %}
@@ -152,7 +152,7 @@
         <div class="list">
             {% for d in p.deports %}
             <div>
-                <span>{% if d.bill_slug %}<a href="/texte/{{ d.bill_slug }}">{{ d.target | truncate(110) }}</a>{% else %}{{ d.target | truncate(110) }}{% endif %}</span>
+                <span>{% if d.bill_slug %}<a href="/texte/{{ d.bill_slug }}/">{{ d.target | truncate(110) }}</a>{% else %}{{ d.target | truncate(110) }}{% endif %}</span>
                 <span class="small ink2">« {{ d.reason or 'Motif non précisé' }} »</span>
                 <span class="small muted">{{ d.date | date }}{% if d.scope %} · {{ d.scope }}{% endif %}</span>
             </div>
@@ -197,7 +197,7 @@
             {% for d in p.declarations | reverse %}
             <div>
                 <span>{% if d.source_file %}<a href="{{ hatvp_files }}{{ d.source_file }}.pdf" target="_blank" rel="noopener">{{ labels.DOC_TYPES.get(d.doc_type, d.doc_type) }}{{ ' modificative' if d.is_modification }} ↗</a>{% else %}{{ labels.DOC_TYPES.get(d.doc_type, d.doc_type) }}{% endif %}</span>
-                <span class="small muted">déposée le {{ d.filed_at | date }}{% if d.mandate_label %} · {{ d.mandate_label | truncate(60) }}{% endif %}{% if d.status == 'archived' %} · retirée du site de la HATVP, conservée en archive{% endif %}</span>
+                <span class="small muted">déposée le {{ d.filed_at | date }}{% if d.mandate_label %} · {{ d.mandate_label | truncate(60) }}{% endif %}</span>
             </div>
             {% endfor %}
         </div>

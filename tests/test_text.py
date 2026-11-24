@@ -60,7 +60,9 @@ def test_short_bill_names_budget_bills_by_acronym():
 
 
 def test_short_bill_drops_boilerplate_and_stated_purpose():
-    title = ("Proposition de loi visant à la nationalisation d'ArcelorMittal France "
-             "afin de préserver la souveraineté industrielle de la France")
+    title = (
+        "Proposition de loi visant à la nationalisation d'ArcelorMittal France "
+        "afin de préserver la souveraineté industrielle de la France"
+    )
     assert labels.short_bill(title) == "PPL nationalisation d'ArcelorMittal France"
     assert labels.short_bill("Proposition de loi relative au droit à l'aide à mourir") == "PPL droit à l'aide à mourir"

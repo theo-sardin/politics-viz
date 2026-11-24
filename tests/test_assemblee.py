@@ -4,19 +4,24 @@ from pv.sources.assemblee import parse_title
 
 
 def test_amendment_on_a_bill():
-    r = parse_title("l'amendement n° 2067 de Mme Blin après l'article 19 du projet de loi de "
-                    "simplification de la vie économique (première lecture).")
+    r = parse_title(
+        "l'amendement n° 2067 de Mme Blin après l'article 19 du projet de loi de "
+        "simplification de la vie économique (première lecture)."
+    )
     assert r.kind == "amendement"
     assert r.bill_title == "Projet de loi de simplification de la vie économique"
     assert r.stage == "première lecture"
 
 
 def test_final_vote_and_senate_wording():
-    r = parse_title("l'ensemble de la proposition de loi, adoptée par le Sénat, relative à l'instauration "
-                    "d'un nombre minimum de soignants par patient hospitalisé (première lecture).")
+    r = parse_title(
+        "l'ensemble de la proposition de loi, adoptée par le Sénat, relative à l'instauration "
+        "d'un nombre minimum de soignants par patient hospitalisé (première lecture)."
+    )
     assert r.kind == "ensemble"
-    assert r.bill_title == ("Proposition de loi relative à l'instauration d'un nombre minimum de soignants "
-                            "par patient hospitalisé")
+    assert r.bill_title == (
+        "Proposition de loi relative à l'instauration d'un nombre minimum de soignants par patient hospitalisé"
+    )
 
 
 @pytest.mark.parametrize(
@@ -33,8 +38,9 @@ def test_stage_markers_never_leak_into_the_bill_name(title):
 
 
 def test_budget_mission_suffix_is_dropped():
-    r = parse_title("les crédits de la mission Défense du projet de loi de finances pour 2024 "
-                    "(première lecture) - Mission Défense")
+    r = parse_title(
+        "les crédits de la mission Défense du projet de loi de finances pour 2024 (première lecture) - Mission Défense"
+    )
     assert r.bill_title == "Projet de loi de finances pour 2024"
 
 

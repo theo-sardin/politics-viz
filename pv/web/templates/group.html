@@ -2,7 +2,7 @@
 {% import "_macros.html" as m with context %}
 {% block title %}{{ g.label }}{% endblock %}
 {% block main %}
-<p class="crumb"><a href="/elus?scope={{ g.chamber }}">{{ labels.CHAMBERS[g.chamber] }}</a></p>
+<p class="crumb"><a href="{{ page_url('elus', g.chamber) }}">{{ labels.CHAMBERS[g.chamber] }}</a></p>
 <div class="page-head">
     <div>
         <h1><span class="dot" style="--g:{{ g.color }};--gd:{{ g.color_dark }};width:16px;height:16px;margin-right:6px"></span>{{ g.label }}</h1>
@@ -44,7 +44,7 @@
             <div class="bars" role="list">
                 {% for c in g.companies %}
                 <div class="bar-row" role="listitem" data-tip="{{ c.name }}&#10;{{ c.n }} membre{{ 's' if c.n > 1 }} · {{ c.total | eur }}">
-                    <a class="lab" href="/societe/{{ c.slug }}">{{ c.name }}</a>
+                    <a class="lab" href="/societe/{{ c.slug }}/">{{ c.name }}</a>
                     <div class="track"><div class="fill" style="width:{{ (100 * c.n / peak) | round(1) }}%"></div></div>
                     <span class="val">{{ c.n }}</span>
                 </div>
@@ -54,7 +54,7 @@
         {% endif %}
         {% if g.signals %}
         <section class="card">
-            <h2>Signaux les plus forts <a href="/signaux?scope={{ g.chamber }}&groupe={{ g.slug }}">Tous →</a></h2>
+            <h2>Signaux les plus forts <a href="{{ page_url('signaux', g.chamber) }}?groupe={{ g.slug }}">Tous →</a></h2>
             <div class="signals">{% for s in g.signals[:6] %}{{ m.signal(s, compact=True) }}{% endfor %}</div>
         </section>
         {% endif %}

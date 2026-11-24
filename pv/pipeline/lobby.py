@@ -46,19 +46,33 @@ def load_lobby(conn: sqlite3.Connection, store: CompanyStore, path: Path) -> dic
                 domain_counts[s] += 1
         n = len(org.actions)
         org_sectors = [s for s, c in domain_counts.most_common(3) if n and c / n >= 0.25]
-        latest = max((y for y in org.years if y.spend_min is not None or y.spend_max is not None),
-                     key=lambda y: y.year, default=None)
+        latest = max(
+            (y for y in org.years if y.spend_min is not None or y.spend_max is not None),
+            key=lambda y: y.year,
+            default=None,
+        )
 
         cur = conn.execute(
             """INSERT OR IGNORE INTO lobby_org(national_id, name, name_key, category, website, company_id,
                                                sectors, spend_year, spend_min, spend_max, staff, n_actions,
                                                n_actions_parl, active)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (org.national_id, org.name, refs[0].slug if refs else fold(org.name).replace(" ", "-"),
-             org.category, org.website, company_id, ",".join(org_sectors) or None,
-             latest.year if latest else None, latest.spend_min if latest else None,
-             latest.spend_max if latest else None, latest.staff if latest else None,
-             n, sum(a.targets_parl for a in org.actions), int(org.active)),
+            (
+                org.national_id,
+                org.name,
+                refs[0].slug if refs else fold(org.name).replace(" ", "-"),
+                org.category,
+                org.website,
+                company_id,
+                ",".join(org_sectors) or None,
+                latest.year if latest else None,
+                latest.spend_min if latest else None,
+                latest.spend_max if latest else None,
+                latest.staff if latest else None,
+                n,
+                sum(a.targets_parl for a in org.actions),
+                int(org.active),
+            ),
         )
         if not cur.rowcount:
             continue
@@ -73,8 +87,10 @@ def load_lobby(conn: sqlite3.Connection, store: CompanyStore, path: Path) -> dic
         )
         conn.executemany(
             "INSERT INTO lobby_action(org_id, year, subject, domains, targets_parl, on_law) VALUES (?,?,?,?,?,?)",
-            [(oid, a.year, a.subject, "; ".join(a.domains) or None, int(a.targets_parl), int(a.on_law))
-             for a in org.actions],
+            [
+                (oid, a.year, a.subject, "; ".join(a.domains) or None, int(a.targets_parl), int(a.on_law))
+                for a in org.actions
+            ],
         )
         stats["actions"] += n
 
@@ -106,7 +122,8 @@ def match_bills(conn: sqlite3.Connection) -> dict[str, int]:
     """Link lobbying actions and recusal notices to the bills they mention."""
     stats = {"bill_lobby": 0, "bills_with_lobby": 0, "deports_linked": 0}
     bills = [
-        b for b in conn.execute("SELECT id, title, first_vote, last_vote FROM bill WHERE first_vote IS NOT NULL")
+        b
+        for b in conn.execute("SELECT id, title, first_vote, last_vote FROM bill WHERE first_vote IS NOT NULL")
         if "commission d enquete" not in fold(b["title"])
     ]
     patterns = [billmatch.bill_pattern(b["id"], b["title"], b["first_vote"], b["last_vote"]) for b in bills]
@@ -117,7 +134,9 @@ def match_bills(conn: sqlite3.Connection) -> dict[str, int]:
     for pat in patterns:
         ids = corpus.match(pat)
         if ids:
-            conn.executemany("INSERT OR IGNORE INTO bill_lobby(bill_id, action_id) VALUES (?, ?)", [(pat.bill_id, i) for i in ids])
+            conn.executemany(
+                "INSERT OR IGNORE INTO bill_lobby(bill_id, action_id) VALUES (?, ?)", [(pat.bill_id, i) for i in ids]
+            )
             stats["bill_lobby"] += len(ids)
             stats["bills_with_lobby"] += 1
 

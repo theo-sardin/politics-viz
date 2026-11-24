@@ -46,13 +46,13 @@ def test_groups_roles_and_fallbacks(conn):
 
 def test_declarations_carry_their_source_file_and_amendment_flag(conn):
     rows = conn.execute(
-        """SELECT d.uuid, d.source_file, d.is_modification, d.status FROM declaration d
+        """SELECT d.uuid, d.source_file, d.is_modification FROM declaration d
            JOIN person p ON p.id = d.person_id WHERE p.nom = 'Martin' ORDER BY d.filed_at"""
     ).fetchall()
     assert [tuple(r) for r in rows] == [
-        ("a-1", "martin-alice-dia1", 0, "published"),
+        ("a-1", "martin-alice-dia1", 0),
         # The XML says "not an amendment"; the index, which is right, says it is.
-        ("a-2", "martin-alice-diam2", 1, "published"),
+        ("a-2", "martin-alice-diam2", 1),
     ]
 
 
@@ -62,8 +62,13 @@ def test_holdings_are_canonicalised_and_placeholders_dropped(conn):
            JOIN declaration d ON d.id = h.declaration_id LEFT JOIN company c ON c.id = h.company_id
            WHERE d.uuid = 'a-2' ORDER BY h.value_eur DESC"""
     ).fetchall()
-    assert [tuple(r) for r in rows] == [("TotalEnergies", "totalenergies", 33000, 500), ("Sanofi", "sanofi", 15000, 150)]
-    sci = conn.execute("SELECT label, company_id, sectors, capital_pct FROM holding WHERE raw_name LIKE 'SCI%'").fetchone()
+    assert [tuple(r) for r in rows] == [
+        ("TotalEnergies", "totalenergies", 33000, 500),
+        ("Sanofi", "sanofi", 15000, 150),
+    ]
+    sci = conn.execute(
+        "SELECT label, company_id, sectors, capital_pct FROM holding WHERE raw_name LIKE 'SCI%'"
+    ).fetchone()
     assert tuple(sci) == ("SCI (nom non publié)", None, "immobilier", 50.0)
 
 
@@ -150,8 +155,16 @@ def test_trade_then_vote_is_the_headline_signal(conn):
     ev = s["evidence"]
     assert ev["links"][0]["strength"] == "lobby" and ev["links"][0]["value"] == 33000
     assert ev["roles"] == ["rapporteur"]
-    assert ev["votes"] == {"n": 2, "pour": 2, "contre": 0, "abst": 0, "dissent": 0,
-                           "first": "2025-04-09", "last": "2025-04-10", "final": "pour"}
+    assert ev["votes"] == {
+        "n": 2,
+        "pour": 2,
+        "contre": 0,
+        "abst": 0,
+        "dissent": 0,
+        "first": "2025-04-09",
+        "last": "2025-04-10",
+        "final": "pour",
+    }
     assert ev["trades"][0]["kind"] == "renforcement" and ev["trades"][0]["basis"] == "shares"
     assert "simplifier les procédures" in ev["lobby"][0]["subject"]
     assert ev["decl"]["file"] == "martin-alice-diam2"  # the declaration in force on the day of the vote
@@ -188,8 +201,9 @@ def test_hemicycle_layout_fills_the_band_at_any_size():
     rows = {round((x * x + y * y) ** 0.5, 3) for x, y in pos}
     assert 9 <= len(rows) <= 14  # several concentric arcs, not one crowded line
     assert radius > 0.012  # seats big enough to see and to hover
-    nearest = min(((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5
-                  for i, (ax, ay) in enumerate(pos) for bx, by in pos[i + 1:i + 40])
+    nearest = min(
+        ((ax - bx) ** 2 + (ay - by) ** 2) ** 0.5 for i, (ax, ay) in enumerate(pos) for bx, by in pos[i + 1 : i + 40]
+    )
     assert nearest > 2 * radius  # and they do not overlap
     for n in (1, 2, 5, 40, 348):
         small, r = queries._hemicycle_positions(n)
@@ -199,16 +213,9 @@ def test_hemicycle_layout_fills_the_band_at_any_size():
 def test_person_page_data(conn):
     p = queries.person(conn, "martin-alice-1")
     assert [d["filed_at"][:10] for d in p["series"]] == ["2024-09-01", "2025-03-01"]
-    total = next(l for l in p["lines"] if l["slug"] == "totalenergies")
+    total = next(ln for ln in p["lines"] if ln["slug"] == "totalenergies")
     cells = [total["cells"][d["id"]] for d in p["series"]]
     assert [(c["value"], c["change"]) for c in cells] == [(20000, None), (33000, "renforcement")]
     assert p["interests"]["conjoint"][0]["company_name"] == "Société Générale"
     assert p["vote_stats"]["n"] == 4
     assert queries.person(conn, "nobody") is None
-
-
-def test_search_spans_people_companies_and_bills(conn):
-    assert [r["label"] for r in queries.search(conn, "martin")] == ["Alice Martin"]
-    assert queries.search(conn, "totalen")[0]["url"] == "/societe/totalenergies"
-    assert queries.search(conn, "energies renouvelables")[0]["type"] == "Texte"
-    assert queries.search(conn, "x") == []

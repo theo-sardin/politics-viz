@@ -103,12 +103,12 @@ class Corpus:
 
     def _phrase_hits(self, phrase: tuple[str, ...]) -> list[int]:
         lists = [self.postings.get(t) for t in phrase]
-        if any(not l for l in lists):
+        if any(not ln for ln in lists):
             return []
         lists.sort(key=len)
         cand = set(lists[0])
-        for l in lists[1:]:
-            cand.intersection_update(l)
+        for ln in lists[1:]:
+            cand.intersection_update(ln)
             if not cand:
                 return []
         needle = " " + " ".join(phrase) + " "

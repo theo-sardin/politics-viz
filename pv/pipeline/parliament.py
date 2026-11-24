@@ -62,8 +62,9 @@ _FALLBACK = ("#00917f", "#0fa392", 9)
 _MEMBERSHIP_KINDS = {"GP", "COMPER", "COMNL", "CNPE", "CNPS", "MISINFO", "MISINFOCOM", "GE", "DELEG", "OFFPAR"}
 
 
-def _ensure_group(conn, cache: dict, chamber: str, code: str, label: str, color: str, dark: str, order: int,
-                  organe: str | None = None) -> int:
+def _ensure_group(
+    conn, cache: dict, chamber: str, code: str, label: str, color: str, dark: str, order: int, organe: str | None = None
+) -> int:
     slug = f"{chamber}-{fold(code).replace(' ', '-')}"
     if slug in cache:
         return cache[slug]
@@ -103,8 +104,14 @@ def load_assemblee_roles(conn: sqlite3.Connection, people: People, acteurs_path:
         seat = next((m for m in a.mandats if m.kind == "ASSEMBLEE" and m.legislature == leg and m.end is None), None)
         # A mandate left open in a government that has itself ended is stale data.
         gov = next(
-            (m for m in a.mandats if m.kind == "GOUVERNEMENT" and m.end is None
-             and m.organe_uid in organes and not organes[m.organe_uid].ended),
+            (
+                m
+                for m in a.mandats
+                if m.kind == "GOUVERNEMENT"
+                and m.end is None
+                and m.organe_uid in organes
+                and not organes[m.organe_uid].ended
+            ),
             None,
         )
 
@@ -120,7 +127,9 @@ def load_assemblee_roles(conn: sqlite3.Connection, people: People, acteurs_path:
             if seat is not None:
                 stats["deputes_sans_hatvp"] += 1
         people.set_ids(pid, an_id=a.uid)
-        slug = people.slug_of.get(pid) or a.hatvp_slug or (index.by_origin.get(a.uid[2:]) if index is not None else None)
+        slug = (
+            people.slug_of.get(pid) or a.hatvp_slug or (index.by_origin.get(a.uid[2:]) if index is not None else None)
+        )
         ip = index.people.get(slug) if index is not None and slug else None
         people.set_slug(pid, slug, ip.photo() if ip else None)
         people.set_birth(pid, a.birth_date)
@@ -135,14 +144,22 @@ def load_assemblee_roles(conn: sqlite3.Connection, people: People, acteurs_path:
                 role += f" · {seat.departement}"
                 if seat.circo:
                     role += f", {seat.circo}{'re' if seat.circo == '1' else 'e'} circ."
-            gp = next((m for m in a.mandats if m.kind == "GP" and m.end is None and m.organe_uid in group_by_organe), None)
+            gp = next(
+                (m for m in a.mandats if m.kind == "GP" and m.end is None and m.organe_uid in group_by_organe), None
+            )
             com = next((m for m in a.mandats if m.kind == "COMPER" and m.end is None), None)
             conn.execute(
                 """UPDATE person SET chamber = 'an', active = 1, role = ?, departement = ?, seat = ?,
                                      group_id = ?, committee = ?
                    WHERE id = ?""",
-                (role, seat.departement, seat.seat, group_by_organe.get(gp.organe_uid) if gp else None,
-                 organes[com.organe_uid].label if com and com.organe_uid in organes else None, pid),
+                (
+                    role,
+                    seat.departement,
+                    seat.seat,
+                    group_by_organe.get(gp.organe_uid) if gp else None,
+                    organes[com.organe_uid].label if com and com.organe_uid in organes else None,
+                    pid,
+                ),
             )
             stats["deputes"] += 1
         if gov is not None:
@@ -216,9 +233,39 @@ def load_senat_roles(conn: sqlite3.Connection, people: People, senateurs_path: P
 
 # Company names that are also ordinary words: never matched inside a bill title.
 _AMBIGUOUS_NAMES = {
-    "orange", "casino", "legrand", "apple", "rubis", "accor", "elis", "spie", "puma", "seb", "bic",
-    "shell", "meta", "amazon", "ing", "sap", "eni", "roche", "merck", "linde", "suez", "safran",
-    "vinci", "atos", "rallye", "lcl", "scor", "adp", "gtt", "tesla", "michelin", "renault", "canal",
+    "orange",
+    "casino",
+    "legrand",
+    "apple",
+    "rubis",
+    "accor",
+    "elis",
+    "spie",
+    "puma",
+    "seb",
+    "bic",
+    "shell",
+    "meta",
+    "amazon",
+    "ing",
+    "sap",
+    "eni",
+    "roche",
+    "merck",
+    "linde",
+    "suez",
+    "safran",
+    "vinci",
+    "atos",
+    "rallye",
+    "lcl",
+    "scor",
+    "adp",
+    "gtt",
+    "tesla",
+    "michelin",
+    "renault",
+    "canal",
 }
 
 
@@ -305,8 +352,20 @@ def load_votes(
                 """INSERT INTO scrutin(uid, legislature, numero, date, title, kind, outcome, n_pour, n_contre,
                                        n_abstention, bill_id, stage)
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (sc.uid, leg, sc.numero, sc.date, sc.title, parsed.kind, sc.outcome, sc.n_pour, sc.n_contre,
-                 sc.n_abstention, bill_id, parsed.stage),
+                (
+                    sc.uid,
+                    leg,
+                    sc.numero,
+                    sc.date,
+                    sc.title,
+                    parsed.kind,
+                    sc.outcome,
+                    sc.n_pour,
+                    sc.n_contre,
+                    sc.n_abstention,
+                    bill_id,
+                    parsed.stage,
+                ),
             )
             sid = cur.lastrowid
             rows = {}
@@ -314,7 +373,9 @@ def load_votes(
                 pid = people.by_an.get(ref)
                 if pid is not None:
                     rows[pid] = (sid, pid, pos, dissent)
-            conn.executemany("INSERT INTO vote(scrutin_id, person_id, position, dissent) VALUES (?, ?, ?, ?)", rows.values())
+            conn.executemany(
+                "INSERT INTO vote(scrutin_id, person_id, position, dissent) VALUES (?, ?, ?, ?)", rows.values()
+            )
             stats["scrutins"] += 1
             stats["votes"] += len(rows)
 
@@ -344,7 +405,8 @@ def load_votes(
     by_uid = {(b["legislature"], b["dossier_uid"]): b["id"] for b in bills if b["dossier_uid"]}
     by_key = {(b["legislature"], b["key"]): b["id"] for b in bills}
     defense_committees = {
-        r["uid"] for r in conn.execute("SELECT uid, label FROM organe WHERE kind = 'COMPER'")
+        r["uid"]
+        for r in conn.execute("SELECT uid, label FROM organe WHERE kind = 'COMPER'")
         if "defense" in fold(r["label"])
     }
     committee_of: dict[int, str | None] = {}
@@ -377,8 +439,12 @@ def load_votes(
         secs = list(cls.sectors)
         if not secs and not cls.transversal and committee_of.get(b["id"]) in defense_committees:
             secs = ["defense"]
-        conn.execute("UPDATE bill SET transversal = ?, budget = ? WHERE id = ?", (int(cls.transversal), int(cls.budget), b["id"]))
-        conn.executemany("INSERT OR IGNORE INTO bill_sector(bill_id, sector) VALUES (?, ?)", [(b["id"], s) for s in secs])
+        conn.execute(
+            "UPDATE bill SET transversal = ?, budget = ? WHERE id = ?", (int(cls.transversal), int(cls.budget), b["id"])
+        )
+        conn.executemany(
+            "INSERT OR IGNORE INTO bill_sector(bill_id, sector) VALUES (?, ?)", [(b["id"], s) for s in secs]
+        )
         for k in companies_named_in(b["title"]):
             cid = company_ids(k)
             if cid is not None:
@@ -387,8 +453,10 @@ def load_votes(
     conn.execute("DELETE FROM bill WHERE NOT EXISTS (SELECT 1 FROM scrutin s WHERE s.bill_id = bill.id)")
     conn.executemany(
         "UPDATE bill SET slug = ? WHERE id = ?",
-        [(bill_slug(b["legislature"], b["key"], b["title"]), b["id"])
-         for b in conn.execute("SELECT id, legislature, key, title FROM bill").fetchall()],
+        [
+            (bill_slug(b["legislature"], b["key"], b["title"]), b["id"])
+            for b in conn.execute("SELECT id, legislature, key, title FROM bill").fetchall()
+        ],
     )
     conn.execute(
         """INSERT INTO person_bill

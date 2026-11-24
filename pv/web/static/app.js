@@ -1,4 +1,4 @@
-/* Site behaviour, no dependency: search box, hover tooltips, hemicycle modes. */
+/* Site behaviour, no dependency: hover tooltips, search box, hemicycle modes, theme. */
 (function () {
     "use strict";
 
@@ -43,34 +43,64 @@
     document.addEventListener("focusout", hideTip);
     document.addEventListener("scroll", hideTip, { passive: true });
 
-    // ---- search ----
+    // ---- search: the whole index is fetched once, then matched here ----
+    // BASE is the path the site is served under ("" at a domain root).
+    const BASE = document.documentElement.dataset.base || "";
     const input = document.getElementById("q");
     const box = document.getElementById("q-results");
-    let timer = null, active = -1, seq = 0;
+    const LIMITS = { "Élu": 8, "Société": 5, "Texte": 5 };
+    let index = null, loading = null, active = -1;
+
+    const fold = (s) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase()
+        .replace(/[^a-z0-9]+/g, " ").trim();
+
+    function loadIndex() {
+        if (!loading) {
+            loading = fetch(BASE + "/data/search.json")
+                .then((r) => (r.ok ? r.json() : []))
+                .then((rows) => { index = rows; })
+                .catch(() => { index = []; loading = null; });
+        }
+        return loading;
+    }
+
+    function lookup(q) {
+        const words = fold(q).split(" ").filter(Boolean);
+        if (!words.length || !index) return [];
+        const taken = {}, out = [];
+        for (const row of index) {  // already ordered best-first within each type
+            if ((taken[row.t] || 0) >= (LIMITS[row.t] || 5)) continue;
+            if (words.every((w) => row.k.includes(w))) {
+                taken[row.t] = (taken[row.t] || 0) + 1;
+                out.push(row);
+            }
+        }
+        return out;
+    }
 
     function render(results) {
         box.replaceChildren();
         active = -1;
         if (!results.length) {
-            const empty = document.createElement("a");
-            empty.style.gridTemplateColumns = "1fr";
-            empty.style.color = "var(--muted)";
-            empty.textContent = "Aucun résultat";
-            box.appendChild(empty);
+            const none = document.createElement("a");
+            none.style.gridTemplateColumns = "1fr";
+            none.style.color = "var(--muted)";
+            none.textContent = "Aucun résultat";
+            box.appendChild(none);
         }
         for (const r of results) {
             const a = document.createElement("a");
-            a.href = r.url;
+            a.href = BASE + r.u;
             a.setAttribute("role", "option");
             const type = document.createElement("span");
             type.className = "t";
-            type.textContent = r.type;
+            type.textContent = r.t;
             const body = document.createElement("span");
-            body.textContent = r.label;
-            if (r.sub || r.code) {
+            body.textContent = r.l;
+            if (r.s) {
                 const sub = document.createElement("span");
                 sub.className = "s";
-                sub.textContent = [r.code, r.sub].filter(Boolean).join(" · ");
+                sub.textContent = r.s;
                 body.appendChild(sub);
             }
             a.append(type, body);
@@ -80,18 +110,12 @@
     }
 
     if (input) {
-        input.addEventListener("input", () => {
-            clearTimeout(timer);
+        input.addEventListener("focus", loadIndex, { once: true });
+        input.addEventListener("input", async () => {
             const q = input.value.trim();
             if (q.length < 2) { box.style.display = "none"; return; }
-            timer = setTimeout(async () => {
-                const mine = ++seq;
-                try {
-                    const r = await fetch("/api/search?q=" + encodeURIComponent(q));
-                    if (!r.ok || mine !== seq) return;
-                    render(await r.json());
-                } catch (err) { /* offline: leave the box as it is */ }
-            }, 160);
+            await loadIndex();
+            if (input.value.trim() === q) render(lookup(q));
         });
         input.addEventListener("keydown", (e) => {
             const items = [...box.querySelectorAll("a[href]")];
@@ -132,6 +156,20 @@
         });
     }
 
+    // ---- a portrait that fails to load becomes the person's initials ----
+    function toInitials(img) {
+        const span = document.createElement("span");
+        span.className = img.className + " ph";
+        span.style.cssText = img.style.cssText;
+        span.textContent = img.dataset.i || "";
+        span.setAttribute("aria-hidden", "true");
+        img.replaceWith(span);
+    }
+    document.querySelectorAll("img.avatar").forEach((img) => {
+        if (img.complete && img.naturalWidth === 0) toInitials(img);
+        else img.addEventListener("error", () => toInitials(img), { once: true });
+    });
+
     // ---- theme toggle: the reader's choice overrides the OS setting ----
     const themeBtn = document.getElementById("theme");
     if (themeBtn) {
@@ -145,8 +183,4 @@
         });
     }
 
-    // ---- filter forms submit on change ----
-    document.querySelectorAll("form.filters select").forEach((sel) => {
-        sel.addEventListener("change", () => sel.form.submit());
-    });
 })();

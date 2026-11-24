@@ -1,0 +1,70 @@
+name: Publier le site
+
+# Rebuilds the database from the public sources and republishes the static
+# site. Runs on every push to main, once a night, and on demand.
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "23 4 * * *" # 04:23 UTC, after the sources' own nightly refresh
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; let a running one finish rather than cancel it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - run: pip install -e '.[dev]'
+
+      - name: Lint and test
+        run: |
+          ruff check pv tests
+          pytest -q
+
+      # Sources are fetched conditionally and portraits only once: carrying
+      # them from one run to the next spares the upstream servers.
+      - name: Restore downloaded sources and portraits
+        uses: actions/cache@v6
+        with:
+          path: |
+            data/raw
+            data/photos
+          key: sources-${{ github.run_id }}
+          restore-keys: sources-
+
+      - name: Build the database
+        run: pv sync
+
+      - name: Export the static site
+        run: pv export site --base "/${{ github.event.repository.name }}"
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

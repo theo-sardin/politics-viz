@@ -2,17 +2,17 @@
 {% import "_macros.html" as m with context %}
 {% block title %}{{ b.short }}{% endblock %}
 {% block main %}
-<p class="crumb"><a href="/textes">Textes</a> › {{ b.legislature }}e législature</p>
+<p class="crumb"><a href="/textes/">Textes</a> › {{ b.legislature }}e législature</p>
 <div class="page-head">
     <div>
         <h1 style="font-size:1.4rem;max-width:44ch">{{ b.title }}</h1>
         <div class="chips" style="margin-top:10px">
-            {% for s in b.sectors %}<a class="chip strong" href="/textes?secteur={{ s.slug }}">{{ s.label }}</a>{% endfor %}
+            {% for s in b.sectors %}<a class="chip strong" href="/textes/?secteur={{ s.slug }}">{{ s.label }}</a>{% endfor %}
             {% if b.transversal %}<span class="chip" data-tip="Texte budgétaire ou fourre-tout : il touche tous les secteurs, donc aucun lien sectoriel n'en est tiré.">Transversal</span>{% endif %}
             {% if b.budget %}<span class="chip" data-tip="Budget de la sécurité sociale : lien sectoriel large (santé, assurance), pondéré à la baisse.">Budget social</span>{% endif %}
             {% if b.procedure %}<span class="chip">{{ b.procedure }}</span>{% endif %}
             {% if b.committee %}<span class="chip">{{ b.committee }}</span>{% endif %}
-            {% for c in b.companies %}<a class="chip strong" href="/societe/{{ c.slug }}" data-tip="Société nommée dans l'intitulé du texte">{{ c.name }}</a>{% endfor %}
+            {% for c in b.companies %}<a class="chip strong" href="/societe/{{ c.slug }}/" data-tip="Société nommée dans l'intitulé du texte">{{ c.name }}</a>{% endfor %}
             {% if b.url %}<a class="chip" href="{{ b.url }}" target="_blank" rel="noopener">Dossier législatif ↗</a>{% endif %}
         </div>
     </div>
@@ -46,7 +46,7 @@
             <tbody>
             {% for l in b.lobby %}
             <tr>
-                <td>{% if l.company_slug %}<a href="/societe/{{ l.company_slug }}">{{ l.org | truncate(42) }}</a>{% else %}{{ l.org | truncate(42) }}{% endif %}</td>
+                <td>{% if l.company_slug %}<a href="/societe/{{ l.company_slug }}/">{{ l.org | truncate(42) }}</a>{% else %}{{ l.org | truncate(42) }}{% endif %}</td>
                 <td class="small ink2">{{ l.subject | truncate(190) }}</td>
                 <td class="num">{{ l.year }}</td>
                 <td class="num">{{ l.holders or '—' }}</td>

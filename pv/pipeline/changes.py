@@ -108,10 +108,21 @@ def compute_changes(conn: sqlite3.Connection) -> dict[str, int]:
                 kind, basis = res
                 b, a = before.get(cid), after.get(cid)
                 rows.append(
-                    (pid, cid, prev["id"], curr["id"], prev["filed_at"][:10], curr["filed_at"][:10], kind, basis,
-                     b.shares if b else None, a.shares if a else None,
-                     b.value if b else None, a.value if a else None,
-                     int(prev["mandate_kind"] == curr["mandate_kind"]))
+                    (
+                        pid,
+                        cid,
+                        prev["id"],
+                        curr["id"],
+                        prev["filed_at"][:10],
+                        curr["filed_at"][:10],
+                        kind,
+                        basis,
+                        b.shares if b else None,
+                        a.shares if a else None,
+                        b.value if b else None,
+                        a.value if a else None,
+                        int(prev["mandate_kind"] == curr["mandate_kind"]),
+                    )
                 )
                 stats[kind] += 1
             prev = curr

@@ -92,6 +92,9 @@
 :root[data-theme="dark"] [style*="--gd"] { --g: var(--gd) !important; }
 
 * { box-sizing: border-box; }
+/* Components set their own `display`, which would otherwise beat the browser's
+   rule for the hidden attribute and leave filtered-out rows on screen. */
+[hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body {
     margin: 0;

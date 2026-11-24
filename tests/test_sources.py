@@ -34,7 +34,9 @@ def test_hatvp_declaration_sections(sources):
     assert a2.doc_type == "DIA" and a2.mandate_kind == "depute"
     assert a2.filed_at == "2025-03-01T09:30:00"
     assert [(h.raw_name, h.value_eur, h.shares) for h in a2.holdings][:2] == [
-        ("PEA TOTAL", 33000, 500), ("Sanofi", 15000, 150)]
+        ("PEA TOTAL", 33000, 500),
+        ("Sanofi", 15000, 150),
+    ]
     spouse = [i for i in a2.interests if i.kind == "conjoint"]
     assert spouse[0].org == "Société Générale" and spouse[0].description == "Analyste"
     # A collaborator with no other employer is still listed, without an organisation.
